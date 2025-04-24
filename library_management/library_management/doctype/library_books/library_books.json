@@ -1,0 +1,189 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "B.######",
+ "creation": "2025-04-24 16:17:30.685181",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "isbn",
+  "book_name",
+  "accession_number",
+  "author",
+  "status",
+  "branch",
+  "column_break_pxyi",
+  "pages",
+  "publisher",
+  "language",
+  "price",
+  "source_of_book",
+  "image",
+  "column_break_frzw",
+  "quantity",
+  "available_quantity",
+  "bill_no_and_date",
+  "call_no",
+  "edition",
+  "year_of_publication",
+  "remarks",
+  "take_home"
+ ],
+ "fields": [
+  {
+   "fieldname": "isbn",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ISBN",
+   "reqd": 1
+  },
+  {
+   "fieldname": "book_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Book Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "accession_number",
+   "fieldtype": "Data",
+   "label": "Accession Number"
+  },
+  {
+   "fieldname": "author",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Author",
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nInactive\nDiscontinued",
+   "reqd": 1
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Branch",
+   "options": "School",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_pxyi",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pages",
+   "fieldtype": "Data",
+   "label": "Pages"
+  },
+  {
+   "fieldname": "publisher",
+   "fieldtype": "Data",
+   "label": "Publisher"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "label": "Language"
+  },
+  {
+   "fieldname": "price",
+   "fieldtype": "Data",
+   "label": "Price"
+  },
+  {
+   "fieldname": "source_of_book",
+   "fieldtype": "Data",
+   "label": "Source of Book"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image",
+   "options": "image"
+  },
+  {
+   "fieldname": "column_break_frzw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Int",
+   "label": "Quantity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "available_quantity",
+   "fieldtype": "Int",
+   "label": "Available Quantity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "bill_no_and_date",
+   "fieldtype": "Data",
+   "label": "Bill No. and Date"
+  },
+  {
+   "fieldname": "call_no",
+   "fieldtype": "Data",
+   "label": "Call No."
+  },
+  {
+   "fieldname": "edition",
+   "fieldtype": "Data",
+   "label": "Edition"
+  },
+  {
+   "fieldname": "year_of_publication",
+   "fieldtype": "Data",
+   "label": "Year of Publication"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Data",
+   "label": "Remarks"
+  },
+  {
+   "default": "0",
+   "fieldname": "take_home",
+   "fieldtype": "Check",
+   "label": "Take Home",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-04-24 16:43:54.038751",
+ "modified_by": "Administrator",
+ "module": "Library Management",
+ "name": "Library Books",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "book_name"
+}

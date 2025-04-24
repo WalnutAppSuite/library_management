@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:{student_ref} {name} {#####}",
+ "creation": "2025-04-24 16:44:54.204848",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "student_details_section",
+  "student",
+  "classs",
+  "column_break_mtqw",
+  "student_ref",
+  "branch",
+  "book_transaction_details_section",
+  "isbn",
+  "book_name",
+  "accession_number",
+  "column_break_nplj",
+  "author",
+  "publisher",
+  "return_date",
+  "quantity_available",
+  "column_break_duyr",
+  "date_of_issue",
+  "reading_period",
+  "due_days",
+  "book_status",
+  "take_home"
+ ],
+ "fields": [
+  {
+   "fieldname": "student_details_section",
+   "fieldtype": "Section Break",
+   "label": "Student Details"
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Student",
+   "options": "Student",
+   "reqd": 1
+  },
+  {
+   "fieldname": "classs",
+   "fieldtype": "Data",
+   "label": "Class"
+  },
+  {
+   "fieldname": "column_break_mtqw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "student_ref",
+   "fieldtype": "Data",
+   "label": "Student Reference Number"
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Data",
+   "label": "Branch"
+  },
+  {
+   "fieldname": "book_transaction_details_section",
+   "fieldtype": "Section Break",
+   "label": "Book Transaction Details"
+  },
+  {
+   "fieldname": "isbn",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ISBN",
+   "reqd": 1
+  },
+  {
+   "fieldname": "book_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Book Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "accession_number",
+   "fieldtype": "Data",
+   "label": "Accession Number"
+  },
+  {
+   "fieldname": "column_break_nplj",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "author",
+   "fieldtype": "Data",
+   "label": "Author"
+  },
+  {
+   "fieldname": "publisher",
+   "fieldtype": "Data",
+   "label": "Publisher"
+  },
+  {
+   "fieldname": "return_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Return Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "quantity_available",
+   "fieldtype": "Data",
+   "label": "Quantity Available"
+  },
+  {
+   "fieldname": "column_break_duyr",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_of_issue",
+   "fieldtype": "Date",
+   "label": "Date of Issue"
+  },
+  {
+   "fieldname": "reading_period",
+   "fieldtype": "Data",
+   "label": "Reading Period"
+  },
+  {
+   "fieldname": "due_days",
+   "fieldtype": "Data",
+   "label": "Due Days"
+  },
+  {
+   "fieldname": "book_status",
+   "fieldtype": "Select",
+   "label": "Book Status",
+   "options": "READING\nRETURNED\nLOST"
+  },
+  {
+   "default": "0",
+   "fieldname": "take_home",
+   "fieldtype": "Check",
+   "label": "Take Home"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-04-24 16:56:44.908131",
+ "modified_by": "Administrator",
+ "module": "Library Management",
+ "name": "Library Transactions",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
