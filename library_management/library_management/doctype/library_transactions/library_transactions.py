@@ -1,174 +1,258 @@
 # Copyright (c) 2025, Frappe and contributors
 # For license information, please see license.txt
 
-# import frappe
-from frappe.model.document import Document
-
-
-class LibraryTransactions(Document):
-	pass
-
-'''
-# Copyright (c) 2025, Frappe and contributors
-# For license information, please see license.txt
-
 import frappe
 from frappe.model.document import Document
-from frappe.utils import getdate
+from frappe.utils import getdate, today, add_days, date_diff, cint
+from frappe import _
 
 class LibraryTransactions(Document):
+    def validate(self):
+        """Validate document before saving"""
+        self.validate_required_fields()
+        self.validate_take_home_permission()
+        self.validate_student_details()
+        self.validate_book_details()
+        self.validate_stock_availability()
+        self.validate_dates()
+        self.auto_set_dates()
+        self.calculate_reading_period()
+        self.calculate_due_days()
+    
+    def after_insert(self):
+        """After inserting the document - only for new records"""
+        if self.book_status == "READING":
+            self.update_student_library_books()
+            self.update_book_inventory()
+    
+    def on_update_after_submit(self):
+        """After updating submitted document"""
+        # Only update if this is a status change
+        if self.has_value_changed("book_status"):
+            self.update_student_library_books()
+    
     def on_update(self):
-        update_period_and_due_days(self, 'on_update')
+        """On document update - handle status changes"""
+        # Only update for existing records and if status changed
+        if not self.is_new() and self.has_value_changed("book_status"):
+            self.update_student_library_books()
+    
+    def validate_required_fields(self):
+        """Validate required fields"""
+        if not self.student:
+            frappe.throw(_("Student is required"))
+        
+        if not self.isbn and not self.accession_number:
+            frappe.throw(_("Either ISBN or Accession Number is required"))
+    
+    def validate_take_home_permission(self):
+        """Validate if book is allowed for home reading"""
+        if not self.take_home and self.book_status == "READING":
+            frappe.throw(_("This book is not allowed for home reading. Only books with 'Take Home' permission can be issued."))
+    
+    def auto_set_dates(self):
+        """Auto-set dates if not provided"""
+        if not self.date_of_issue:
+            self.date_of_issue = today()
+        
+        if not self.return_date and self.date_of_issue:
+            self.return_date = add_days(self.date_of_issue, 7)
+    
+    def validate_student_details(self):
+        """Validate and auto-populate student details"""
+        if self.student:
+            student = frappe.get_value("Student", self.student, 
+                                     ["user", "program", "school", "reference_number"], as_dict=True)
+            
+            if student:
+                if not self.student_email:
+                    self.student_email = student.user
+                if not self.classs:
+                    self.classs = student.program
+                if not self.branch:
+                    self.branch = student.school
 
-    def on_submit(self):
-        update_period_and_due_days(self, 'on_submit')
-
-    def on_change(self):
-        if self.isbn or self.accession_number:
-            fetch_book_details(self, 'on_change')
-
-    def after_save(self):
-        validate_library_transaction(self, 'after_save')
-
-
-# Function to update the reading_period and due_days
-def update_period_and_due_days(doc, method):
-    date_of_issue = doc.date_of_issue
-    return_date = doc.return_date
-    book_status = doc.book_status
-
-    if date_of_issue and return_date:
-        # Calculate the difference in days between return date and issue date
-        days_difference = getdate(return_date) - getdate(date_of_issue)
-        doc.reading_period = f"{days_difference.days + 1} days"  # Include both start and end date
-
-    if book_status == 'READING' and return_date:
-        today = getdate()
-        days_since_return = today - getdate(return_date)
-        doc.due_days = f"{max(days_since_return.days + 1, 0)} days"  # Calculate due days
-
-    doc.save()
-
-
-# Function to fetch book details from Library Books based on ISBN or Accession Number
-def fetch_book_details(doc, method):
-    # Fetch data from Library Books based on ISBN or Accession Number
-    if doc.isbn:
-        filters = {'isbn': doc.isbn}
-    elif doc.accession_number:
-        filters = {'accession_number': doc.accession_number}
-    else:
-        return
-
-    book = frappe.get_all('Library Books', filters=filters, fields=["book_name", "accession_number", "author", "publisher", "avail_quantity", "take_home", "branch"])
-
-    if book:
-        book = book[0]  # Fetch the first result
-        doc.book_name = book.get("book_name")
-        doc.accession_number = book.get("accession_number")
-        doc.quantity_available = book.get("avail_quantity")
-        doc.author = book.get("author")
-        doc.publisher = book.get("publisher")
-        doc.take_home = book.get("take_home")
-        doc.branch = book.get("branch")
-        doc.save()
-    else:
-        frappe.msgprint(__('No matching book found for the provided ISBN or Accession Number.'))
-
-
-# Function to validate library transaction (book issuance)
-def validate_library_transaction(doc, method):
-    reference_number = doc.student_ref
-    class_name = doc.classs
-    student_name = doc.student
-    isbn = doc.isbn
-    accession_number = doc.accession_number
-
-    if reference_number and class_name and student_name and (isbn or accession_number):
-        # Fetch all library transactions except the current document
-        all_library_transactions = frappe.get_all('Library Transactions',
-                                                  filters={
-                                                      'classs': class_name,
-                                                      'student_ref': reference_number,
-                                                      'isbn': isbn,
-                                                      'student': student_name,
-                                                      'book_status': doc.book_status,
-                                                      'return_date': doc.return_date,
-                                                      'name': ('!=', doc.name)
-                                                  })
-
-        if all_library_transactions:
-            frappe.throw("Same book cannot be taken repeatedly at a time.")
-
-        # Fetch Program Enrollment document for the student and class
-        program_enrollment = frappe.get_doc("Program Enrollment", {"student": student_name, "program": class_name})
-        if program_enrollment:
-            if program_enrollment.custom_library_membership:
-                student_doc = frappe.get_doc("Student", {"reference_number": reference_number, "program": class_name})
-                if student_doc:
-                    # Count the number of books issued by reference_number
-                    issued_books_count = frappe.db.count("Library Transactions",
-                                                         filters={"student_ref": reference_number,
-                                                                  "classs": class_name,
-                                                                  "book_status": ("!=", "RETURNED")})
-                    if issued_books_count > 2:
-                        frappe.throw("Only three books are allowed to be issued at a time.")
-
-                    # Update custom_number_of_books_issued with the count of issued books
-                    student_doc.custom_number_of_books_issued = issued_books_count
-
-                    # Fetch library details for the student
-                    library_details = frappe.get_all("Library Transactions",
-                                                     filters={"student_ref": reference_number, "classs": class_name},
-                                                     fields=["book_name", "author", "date_of_issue", "return_date", "take_home",
-                                                             "reading_period", "due_days", "book_status"])
-
-                    if library_details:
-                        student_doc.set("custom_books", [])
-                        update = False
-                        for detail in library_details:
-                            if detail.get("take_home") == 1:
-                                # Use ISBN or accession_number to fetch book details
-                                book_filters = {"isbn": isbn} if isbn else {"accession_number": accession_number}
-                                book_details = frappe.get_all("Library Books", filters=book_filters,
-                                                              fields=["name", "book_name", "avail_quantity", "author", "publisher", "take_home"],
-                                                              limit_page_length=1)
-
-                                if book_details:
-                                    book_details = book_details[0]  # Get the first result
-                                    current_quantity = int(book_details.get('avail_quantity', 0) or 0)
-                                    if doc.book_status == "READING":
-                                        if current_quantity < 0:
-                                            frappe.throw("Book is out of stock.")
-                                        if not update:
-                                            book_details['avail_quantity'] = current_quantity - 1
-                                            update = True
-                                    elif doc.book_status == "RETURNED":
-                                        if not update:
-                                            book_details['avail_quantity'] = current_quantity + 1
-                                            frappe.msgprint("Book quantity updated")
-                                            update = True
-
-                                    frappe.get_doc("Library Books", book_details['name']).update({"avail_quantity": book_details['avail_quantity']}).save()
-
-                                # Append book details to custom_books
-                                library_book = student_doc.append("custom_library_books", {})
-                                library_book.book_name = book_details['book_name']
-                                library_book.author = detail.get("author")
-                                library_book.date_of_issue = detail.get("date_of_issue")
-                                library_book.return_date = detail.get("return_date")
-                                library_book.take_home = detail.get("take_home")
-                                library_book.reading_period = detail.get("reading_period")
-                                library_book.due_days = detail.get("due_days")
-                                library_book.book_status = detail.get("book_status")
-
-                        student_doc.save()
-                        frappe.msgprint("Library book details updated in Student document.")
-                else:
-                    frappe.throw("Student document not found for the given reference number.")
+    def validate_book_details(self):
+        """Validate and auto-populate book details"""
+        if (self.isbn or self.accession_number) and not self.book_name:
+            search_field = "isbn" if self.isbn else "accession_number"
+            search_value = self.isbn if self.isbn else self.accession_number
+            
+            book = frappe.get_value("Library Books", 
+                                  {search_field: search_value},
+                                  ["book_name", "author", "publisher", "available_quantity", 
+                                   "take_home", "branch", "isbn", "accession_number", "status"],
+                                  as_dict=True)
+            
+            if book:
+                if book.status != "Active":
+                    frappe.msgprint(_("Warning: This book is not active in the system"))
+                
+                self.book_name = book.book_name
+                self.author = book.author
+                self.publisher = book.publisher
+                self.quantity_available = book.available_quantity
+                self.take_home = book.take_home
+                
+                if search_field == "isbn" and book.accession_number and not self.accession_number:
+                    self.accession_number = book.accession_number
+                elif search_field == "accession_number" and book.isbn and not self.isbn:
+                    self.isbn = book.isbn
+                
+                if cint(book.available_quantity) <= 0:
+                    frappe.msgprint(_("Warning: This book is currently out of stock"))
+                
             else:
-                frappe.throw("Student is not allowed to issue library books.")
+                frappe.throw(_("No book found with {0}: {1}")
+                           .format(search_field.replace("_", " "), search_value))
+
+    def validate_stock_availability(self):
+        """Validate stock availability for book issuance"""
+        if self.book_status == "READING" and (self.isbn or self.accession_number):
+            search_field = "isbn" if self.isbn else "accession_number"
+            search_value = self.isbn if self.isbn else self.accession_number
+            
+            current_stock = frappe.get_value("Library Books", 
+                                           {search_field: search_value}, 
+                                           "available_quantity")
+            
+            if current_stock is not None and cint(current_stock) <= 0:
+                frappe.throw(_("Cannot issue this book. Current available quantity is {0}. Please check book inventory.").format(current_stock))
+    
+    def validate_dates(self):
+        """Validate date fields"""
+        if self.date_of_issue and self.return_date:
+            if getdate(self.return_date) < getdate(self.date_of_issue):
+                frappe.throw(_("Return date cannot be before issue date"))
+    
+    def calculate_reading_period(self):
+        """Calculate reading period based on issue and return dates"""
+        if self.date_of_issue and self.return_date:
+            days = date_diff(self.return_date, self.date_of_issue)
+            self.reading_period = f"{days} days"
+    
+    def calculate_due_days(self):
+        """Calculate overdue days if applicable"""
+        if (self.book_status == "READING" and 
+            self.return_date and 
+            getdate(self.return_date) < getdate(today())):
+            overdue_days = date_diff(today(), self.return_date)
+            self.due_days = f"{overdue_days} days"
         else:
-            frappe.throw("Program Enrollment not found for the student and class.")
-    else:
-        frappe.throw("Reference number, class, student, or book details not found in the newly added Library Transaction record.")'''
+            self.due_days = "0 days"
+    
+    def update_student_library_books(self):
+        """Update student's custom_library_books child table"""
+        if not self.student or not self.book_name:
+            return
+        
+        # Add flag to prevent multiple calls in same request
+        if hasattr(frappe.local, 'library_update_processed') and frappe.local.library_update_processed:
+            return
+        
+        try:
+            student_doc = frappe.get_doc("Student", self.student)
+            
+            # Create unique identifier for this book transaction
+            book_identifier = f"{self.book_name}_{self.date_of_issue}_{self.isbn or self.accession_number}"
+            
+            # Find existing entry by checking multiple criteria
+            existing_entry = None
+            for book in student_doc.custom_library_books:
+                existing_identifier = f"{book.book_name}_{book.book_issue_date}_{book.book_id}"
+                
+                if existing_identifier == book_identifier:
+                    existing_entry = book
+                    break
+            
+            update_made = False
+            
+            if existing_entry:
+                # Update existing entry
+                existing_entry.book_return_date = str(self.return_date) if self.return_date else ""
+                existing_entry.reading_period = self.reading_period or ""
+                existing_entry.book_status = self.book_status or "READING"
+                existing_entry.due__days = self.due_days or "0 days"
+                existing_entry.take_home = self.take_home or 0
+                existing_entry.author = self.author or ""
+                
+                update_made = True
+                action_message = _("Updated existing book entry in student record")
+                
+            else:
+                # Add new entry only if book status is READING (new issue)
+                if self.book_status == "READING":
+                    library_book = student_doc.append("custom_library_books", {})
+                    library_book.book_id = self.isbn or self.accession_number or ""
+                    library_book.book_name = self.book_name or ""
+                    library_book.reference_number = self.accession_number or ""
+                    library_book.book_issue_date = str(self.date_of_issue) if self.date_of_issue else str(today())
+                    library_book.book_return_date = str(self.return_date) if self.return_date else ""
+                    library_book.reading_period = self.reading_period or ""
+                    library_book.book_status = self.book_status or "READING"
+                    library_book.take_home = self.take_home or 0
+                    library_book.due__days = self.due_days or "0 days"
+                    library_book.author = self.author or ""
+                    
+                    update_made = True
+                    action_message = _("Added new book entry to student record")
+            
+            if update_made:
+                # Update number of books issued - COUNT ONLY READING STATUS BOOKS
+                reading_books_count = 0
+                for book in student_doc.custom_library_books:
+                    if book.book_status == "READING":
+                        reading_books_count += 1
+                
+                student_doc.number_of_books_issued = str(reading_books_count)
+                
+                # Save student document
+                student_doc.save(ignore_permissions=True)
+                
+                # Show single consolidated message
+                frappe.msgprint(_("{0}. Current reading books: {1}").format(action_message, reading_books_count))
+                
+                # Set flag to prevent duplicate calls
+                frappe.local.library_update_processed = True
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating student library books: {str(e)}")
+            frappe.msgprint(_("Warning: Could not update student library records"))
+    
+    def update_book_inventory(self):
+        """Update book inventory when book is issued"""
+        if (self.book_status == "READING" and 
+            (self.isbn or self.accession_number) and
+            self.is_new()):
+            
+            search_field = "isbn" if self.isbn else "accession_number"
+            search_value = self.isbn if self.isbn else self.accession_number
+            
+            try:
+                book_doc = frappe.get_doc("Library Books", {search_field: search_value})
+                if book_doc and book_doc.available_quantity > 0:
+                    book_doc.available_quantity -= 1
+                    book_doc.save(ignore_permissions=True)
+                    frappe.msgprint(_("Book inventory updated - Available quantity: {0}").format(book_doc.available_quantity))
+                    
+            except Exception as e:
+                frappe.log_error(f"Error updating book inventory: {str(e)}")
+
+# Scheduled function to update due days for all reading books
+def update_all_due_days():
+    """Scheduled function to update due days for all books with status READING"""
+    try:
+        reading_transactions = frappe.get_all("Library Transactions",
+                                            filters={"book_status": "READING"},
+                                            fields=["name", "return_date"])
+        
+        for transaction in reading_transactions:
+            if transaction.return_date and getdate(transaction.return_date) < getdate(today()):
+                overdue_days = date_diff(today(), transaction.return_date)
+                frappe.db.set_value("Library Transactions", transaction.name, 
+                                  "due_days", f"{overdue_days} days")
+        
+        frappe.db.commit()
+        
+    except Exception as e:
+        frappe.log_error(f"Error in update_all_due_days: {str(e)}")

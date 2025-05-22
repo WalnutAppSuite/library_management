@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:{student_ref} {name} {#####}",
+ "autoname": "format:{student} {name} {#####}",
  "creation": "2025-04-24 16:44:54.204848",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -10,7 +10,7 @@
   "student",
   "classs",
   "column_break_mtqw",
-  "student_ref",
+  "student_email",
   "branch",
   "book_transaction_details_section",
   "isbn",
@@ -43,6 +43,7 @@
    "reqd": 1
   },
   {
+   "fetch_from": "student.program",
    "fieldname": "classs",
    "fieldtype": "Data",
    "label": "Class"
@@ -52,11 +53,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "student_ref",
-   "fieldtype": "Data",
-   "label": "Student Reference Number"
-  },
-  {
+   "fetch_from": "student.school",
    "fieldname": "branch",
    "fieldtype": "Data",
    "label": "Branch"
@@ -141,12 +138,18 @@
    "fieldname": "take_home",
    "fieldtype": "Check",
    "label": "Take Home"
+  },
+  {
+   "fetch_from": "student.user",
+   "fieldname": "student_email",
+   "fieldtype": "Data",
+   "label": "Student Email"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-24 16:56:44.908131",
+ "modified": "2025-05-22 16:03:39.389444",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Transactions",
