@@ -112,16 +112,16 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "quantity",
-   "fieldtype": "Int",
-   "label": "Quantity",
-   "reqd": 1
+  "fieldname": "quantity",
+  "fieldtype": "Int", 
+  "label": "Quantity",
+  "reqd": 1
   },
   {
-   "fieldname": "available_quantity",
-   "fieldtype": "Int",
-   "label": "Available Quantity",
-   "reqd": 1
+  "fieldname": "available_quantity",
+  "fieldtype": "Int",  
+  "label": "Available Quantity",
+  "reqd": 1
   },
   {
    "fieldname": "bill_no_and_date",
