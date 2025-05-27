@@ -105,7 +105,7 @@
   },
   {
    "fieldname": "quantity_available",
-   "fieldtype": "Data",
+   "fieldtype": "Int",
    "label": "Quantity Available"
   },
   {
