@@ -1,6 +1,9 @@
 // Copyright (c) 2025, Frappe and contributors
 // For license information, please see license.txt
 
+
+
+console.log("Library Transactions JS loaded");
 frappe.ui.form.on("Library Transactions", {
     // Add flag to prevent double triggering
     _is_fetching_book_details: false,
@@ -94,8 +97,27 @@ frappe.ui.form.on("Library Transactions", {
     },
     
     book_status(frm) {
-        calculate_due_days(frm);
+            if (frm.doc.book_status === "RENEWED") {
+        frm.set_value("return_date", frappe.datetime.now_datetime());
+    }
+
+        calculate_due_days(frm); 
+        if (frm.doc.book_status === "RENEWED") {
+            frm.set_df_property("return_date", "read_only", 1);
+        } else {
+            frm.set_df_property("return_date", "read_only", 0);
+        }
+
+
+        if (frm.doc.book_status === "RENEWED") {
+    frm.set_value("due_days", "0 days");
+    frm.dashboard.clear_headline();}
+
     },
+
+
+   
+
     
     // Validation before save
     before_save(frm) {
@@ -349,6 +371,18 @@ function calculate_due_days(frm) {
     }
 }
 
+// Child table event handler for Library Books Student Table
+frappe.ui.form.on("Library Books Student Table", {
+    book_status: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+
+        if (row.book_status === "RENEWED") {
+            // Set book_return_date to current date and time when RENEWED is selected
+            frappe.model.set_value(cdt, cdn, "book_return_date", frappe.datetime.now_datetime());
+        }
+    }
+});
+
 // Helper function to set field properties
 function set_field_properties(frm) {
     // Make certain fields read-only after book details are populated
@@ -358,11 +392,11 @@ function set_field_properties(frm) {
         frm.set_df_property("publisher", "read_only", 1);
         frm.set_df_property("quantity_available", "read_only", 1);
     }
-    
+
     // Set field descriptions
     frm.set_df_property("isbn", "description", "Enter ISBN to auto-populate book details");
     frm.set_df_property("accession_number", "description", "Enter Accession Number to auto-populate book details");
-    
+
     // Highlight take_home field if not checked
     if (frm.doc.take_home === 0 && frm.doc.book_name) {
         frm.set_df_property("take_home", "description", "⚠️ This book is not allowed for home reading");

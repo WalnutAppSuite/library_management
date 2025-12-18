@@ -57,7 +57,7 @@
   },
   {
    "fieldname": "book_return_date",
-   "fieldtype": "Date",
+   "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Book Return Date"
   },
@@ -76,7 +76,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Book Status",
-   "options": "READING\nRETURNED\nLOST"
+   "options": "READING\nRETURNED\nLOST\nRENEWED"
   },
   {
    "fieldname": "due__days",

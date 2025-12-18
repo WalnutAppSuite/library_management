@@ -5,6 +5,7 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff, cint
 from frappe import _
+from frappe.utils import now_datetime
 
 class LibraryTransactions(Document):
     def validate(self):
@@ -16,6 +17,7 @@ class LibraryTransactions(Document):
         self.validate_stock_availability()
         self.validate_dates()
         self.auto_set_dates()
+        self.set_renewed_datetime()   
         self.calculate_reading_period()
         self.calculate_due_days()
     
