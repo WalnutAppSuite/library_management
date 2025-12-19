@@ -1,6 +1,8 @@
 # Copyright (c) 2025, Frappe and contributors
 # For license information, please see license.txt
 
+
+
 import frappe
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff, cint

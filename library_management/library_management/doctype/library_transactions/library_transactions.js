@@ -2,6 +2,10 @@
 // For license information, please see license.txt
 
 
+<<<<<<< Updated upstream
+=======
+//lt .js 
+>>>>>>> Stashed changes
 
 console.log("Library Transactions JS loaded");
 frappe.ui.form.on("Library Transactions", {
