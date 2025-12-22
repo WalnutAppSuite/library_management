@@ -1,13 +1,5 @@
 // Copyright (c) 2025, Frappe and contributors
 // For license information, please see license.txt
-
-
-<<<<<<< Updated upstream
-=======
-//lt .js 
->>>>>>> Stashed changes
-
-console.log("Library Transactions JS loaded");
 frappe.ui.form.on("Library Transactions", {
     // Add flag to prevent double triggering
     _is_fetching_book_details: false,
