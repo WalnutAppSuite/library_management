@@ -3,7 +3,5 @@
 
 # import frappe
 from frappe.model.document import Document
-
-
 class LibraryBooks(Document):
 	pass

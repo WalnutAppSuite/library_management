@@ -1,3 +1,6 @@
+
+
+
 {
  "actions": [],
  "allow_rename": 1,
@@ -131,8 +134,15 @@
    "fieldname": "book_status",
    "fieldtype": "Select",
    "label": "Book Status",
-   "options": "READING\nRETURNED\nLOST"
+   "options": "READING\nRETURNED\nLOST\nRENEWED"
   },
+
+  {
+  "fieldname": "renewed_on",
+  "fieldtype": "Datetime",
+  "label": "Renewed On",
+  "read_only": 1
+},
   {
    "default": "0",
    "fieldname": "take_home",
