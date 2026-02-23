@@ -197,10 +197,10 @@ class LibraryTransactions(Document):
         """Scheduled function to update due days for all books with status READING"""
         try:
             reading_transactions = frappe.get_all("Library Transactions",filters={"book_status": "READING"},fields=["name", "return_date"])
-        for transaction in reading_transactions:
-            if transaction.return_date and getdate(transaction.return_date) < getdate(today()):
-                overdue_days = date_diff(today(), transaction.return_date)
-                frappe.db.set_value("Library Transactions", transaction.name,"due_days", f"{overdue_days} days")
-                frappe.db.commit()
+            for transaction in reading_transactions:
+                if transaction.return_date and getdate(transaction.return_date) < getdate(today()):
+                    overdue_days = date_diff(today(), transaction.return_date)
+                    frappe.db.set_value("Library Transactions", transaction.name,"due_days", f"{overdue_days} days")
+            frappe.db.commit()
         except Exception as e:
-            frappe.log_error(f"Error in update_all_due_days: {str(e)}")# Scheduled function to update due days for all reading books
+            frappe.log_error(f"Error in update_all_due_days: {str(e)}")
