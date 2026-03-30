@@ -15,7 +15,6 @@ class LibraryTransactions(Document):
         self.validate_stock_availability()
         self.validate_dates()
         self.auto_set_dates()
-        self.set_renewed_datetime()   
         self.calculate_reading_period()
         self.calculate_due_days()
     def after_insert(self):
@@ -83,8 +82,8 @@ class LibraryTransactions(Document):
                     self.accession_number = book.accession_number
                 elif search_field == "accession_number" and book.isbn and not self.isbn:
                     self.isbn = book.isbn
-                if cint(book.available_quantity) <= 0:
-                    frappe.msgprint(_("Warning: This book is currently out of stock"))
+                if cint(book.available_quantity) <= 0 and self.book_status == "READING":
+                    frappe.msgprint(_("Warning: This book is currently out of stock (available: {0})").format(book.available_quantity))
             else:
                 frappe.throw(_("No book found with {0}: {1}")
                            .format(search_field.replace("_", " "), search_value))
