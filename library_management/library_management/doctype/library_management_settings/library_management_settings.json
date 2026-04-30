@@ -4,18 +4,53 @@
  "doctype": "DocType", 
  "document_type": "System", 
  "fields": [
-  {
-   "default": "30", 
-   "description": "In days", 
-   "fieldname": "loan_period", 
+    {
+      "default": "30",
+      "description": "In days",
+      "fieldname": "loan_period",
    "fieldtype": "Int", 
    "in_list_view": 1, 
-   "label": "Loan Period", 
-   "permlevel": 0
-  }
- ], 
+      "label": "Loan Period",
+      "permlevel": 0
+    },
+    {
+      "default": "1",
+      "fieldname": "enable_external_metadata_lookup",
+      "fieldtype": "Check",
+      "label": "Enable External Metadata Lookup"
+    },
+    {
+      "default": "0",
+      "fieldname": "enable_ai_fallback",
+      "fieldtype": "Check",
+      "label": "Enable AI Fallback"
+    },
+    {
+      "fieldname": "openai_api_key",
+      "fieldtype": "Password",
+      "label": "OpenAI API Key"
+    },
+    {
+      "default": "gpt-5.4-mini",
+      "fieldname": "ai_model",
+      "fieldtype": "Data",
+      "label": "AI Model"
+    },
+    {
+      "default": "1",
+      "fieldname": "default_take_home",
+      "fieldtype": "Check",
+      "label": "Default Take Home"
+    },
+    {
+      "default": "System Manager",
+      "fieldname": "branch_override_role",
+      "fieldtype": "Data",
+      "label": "Branch Override Role"
+    }
+  ],
  "issingle": 1, 
- "modified": "2014-05-08 13:08:13.838662", 
+ "modified": "2026-04-30 07:03:57.342321",
  "modified_by": "Administrator", 
  "module": "Library Management", 
  "name": "Library Management Settings", 

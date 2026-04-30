@@ -16,6 +16,8 @@
   "student_email",
   "branch",
   "book_transaction_details_section",
+  "books",
+  "legacy_fields_section",
   "isbn",
   "book_name",
   "accession_number",
@@ -67,22 +69,36 @@
    "label": "Book Transaction Details"
   },
   {
+   "fieldname": "books",
+   "fieldtype": "Table",
+   "label": "Books",
+   "options": "Library Transaction Book"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "legacy_fields_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Legacy Single Book Fields"
+  },
+  {
    "fieldname": "isbn",
    "fieldtype": "Data",
+   "hidden": 1,
    "in_list_view": 1,
-   "label": "ISBN",
-   "reqd": 1
+   "label": "ISBN"
   },
   {
    "fieldname": "book_name",
    "fieldtype": "Data",
+   "hidden": 1,
    "in_list_view": 1,
-   "label": "Book Name",
-   "reqd": 1
+   "label": "Book Name"
   },
   {
    "fieldname": "accession_number",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Accession Number"
   },
   {
@@ -92,23 +108,26 @@
   {
    "fieldname": "author",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Author"
   },
   {
    "fieldname": "publisher",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Publisher"
   },
   {
    "fieldname": "return_date",
    "fieldtype": "Date",
+   "hidden": 1,
    "in_list_view": 1,
-   "label": "Return Date",
-   "reqd": 1
+   "label": "Return Date"
   },
   {
    "fieldname": "quantity_available",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Quantity Available"
   },
   {
@@ -118,35 +137,41 @@
   {
    "fieldname": "date_of_issue",
    "fieldtype": "Date",
+   "hidden": 1,
    "label": "Date of Issue"
   },
   {
    "fieldname": "reading_period",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Reading Period"
   },
   {
    "fieldname": "due_days",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Due Days"
   },
   {
    "fieldname": "book_status",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Book Status",
-   "options": "READING\nRETURNED\nLOST\nRENEWED"
+   "options": "READING\nRETURNED"
   },
 
   {
-  "fieldname": "renewed_on",
-  "fieldtype": "Datetime",
-  "label": "Renewed On",
+   "fieldname": "renewed_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Renewed On",
   "read_only": 1
 },
   {
    "default": "0",
    "fieldname": "take_home",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Take Home"
   },
   {
@@ -159,7 +184,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-22 16:03:39.389444",
+ "modified": "2026-04-30 07:03:57.342321",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Transactions",

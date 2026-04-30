@@ -1,0 +1,143 @@
+.library-intake {
+	--ink: #172033;
+	--muted: #64748b;
+	--line: #d8e0ea;
+	--panel: #ffffff;
+	--blue: #1d4ed8;
+	--green: #0f766e;
+	background: #f5f7fb;
+	margin: -15px;
+	padding: 18px;
+	min-height: calc(100vh - 90px);
+}
+
+.library-intake .intake-topbar {
+	display: grid;
+	grid-template-columns: minmax(280px, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	margin-bottom: 14px;
+}
+
+.library-intake h2 {
+	margin: 0;
+	font-size: 24px;
+	font-weight: 850;
+	color: var(--ink);
+}
+
+.library-intake .subtitle {
+	color: var(--muted);
+	font-size: 13px;
+	margin-top: 4px;
+}
+
+.library-intake .summary-pill {
+	background: #e0f2fe;
+	color: #075985;
+	border: 1px solid #bae6fd;
+	border-radius: 999px;
+	padding: 6px 12px;
+	font-weight: 800;
+	font-size: 12px;
+}
+
+.library-intake .filter-panel,
+.library-intake .table-panel {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.library-intake .filter-panel {
+	padding: 14px;
+	margin-bottom: 14px;
+}
+
+.library-intake #intake-filters .form-layout {
+	margin-bottom: 0;
+}
+
+.library-intake .actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.library-intake .table-panel {
+	padding: 0;
+	overflow: hidden;
+}
+
+.library-intake .intake-table {
+	margin: 0;
+	min-width: 1120px;
+}
+
+.library-intake .intake-table thead th {
+	background: #eef4ff;
+	color: #1e293b;
+	font-size: 12px;
+	font-weight: 850;
+	border-bottom: 1px solid var(--line);
+	white-space: nowrap;
+}
+
+.library-intake .intake-table td {
+	vertical-align: middle;
+	background: #fff;
+}
+
+.library-intake .select-col {
+	width: 38px;
+	text-align: center;
+}
+
+.library-intake .book-input {
+	min-width: 132px;
+	border-color: #d7dee8;
+}
+
+.library-intake .book-input.compact {
+	min-width: 86px;
+}
+
+.library-intake .qr-cell {
+	width: 72px;
+	text-align: center;
+}
+
+.library-intake .qr-pending,
+.library-intake .qr-ready {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 62px;
+	height: 28px;
+	border-radius: 999px;
+	background: #f1f5f9;
+	color: #64748b;
+	font-size: 11px;
+	font-weight: 800;
+}
+
+.library-intake .qr-ready {
+	background: #dcfce7;
+	color: #166534;
+}
+
+.library-intake .empty-state {
+	padding: 28px;
+	text-align: center;
+	color: var(--muted);
+	font-weight: 700;
+	border-top: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+	.library-intake .intake-topbar {
+		grid-template-columns: 1fr;
+	}
+}

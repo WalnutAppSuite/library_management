@@ -1,0 +1,910 @@
+import base64
+import io
+import json
+import os
+import re
+import urllib.parse
+import urllib.request
+from contextlib import suppress
+
+import frappe
+from frappe import _
+from frappe.utils import add_days, cint, cstr, date_diff, getdate, nowdate, today
+
+
+ISBN_RE = re.compile(r"(?:(?:97[89])[\-\s]?)?(?:\d[\-\s]?){9}[\dXx]")
+
+
+def _as_dict(value):
+	if not value:
+		return {}
+	if isinstance(value, dict):
+		return value
+	if isinstance(value, str):
+		return json.loads(value)
+	return dict(value)
+
+
+def _as_list(value):
+	if not value:
+		return []
+	if isinstance(value, list):
+		return value
+	if isinstance(value, str):
+		return json.loads(value)
+	return list(value)
+
+
+def _json_get(url, timeout=8):
+	req = urllib.request.Request(url, headers={"User-Agent": "library-management/1.0"})
+	with urllib.request.urlopen(req, timeout=timeout) as response:
+		return json.loads(response.read().decode("utf-8"))
+
+
+def normalize_isbn(value):
+	value = cstr(value).upper().replace("-", "").replace(" ", "")
+	value = re.sub(r"[^0-9X]", "", value)
+	return value
+
+
+def is_valid_isbn10(isbn):
+	isbn = normalize_isbn(isbn)
+	if len(isbn) != 10:
+		return False
+	total = 0
+	for idx, char in enumerate(isbn):
+		if char == "X" and idx == 9:
+			digit = 10
+		elif char.isdigit():
+			digit = int(char)
+		else:
+			return False
+		total += digit * (10 - idx)
+	return total % 11 == 0
+
+
+def is_valid_isbn13(isbn):
+	isbn = normalize_isbn(isbn)
+	if len(isbn) != 13 or not isbn.isdigit():
+		return False
+	total = sum((1 if idx % 2 == 0 else 3) * int(char) for idx, char in enumerate(isbn))
+	return total % 10 == 0
+
+
+def is_valid_isbn(isbn):
+	isbn = normalize_isbn(isbn)
+	return is_valid_isbn10(isbn) or is_valid_isbn13(isbn)
+
+
+def extract_isbn_from_text(text):
+	for match in ISBN_RE.findall(cstr(text)):
+		isbn = normalize_isbn(match)
+		if is_valid_isbn(isbn):
+			return isbn
+	return ""
+
+
+def _settings_value(fieldname, default=None):
+	with suppress(Exception):
+		value = frappe.db.get_single_value("Library Management Settings", fieldname)
+		return default if value is None else value
+	return default
+
+
+def _settings_password(fieldname):
+	with suppress(Exception):
+		return frappe.get_single("Library Management Settings").get_password(fieldname)
+	return None
+
+
+@frappe.whitelist()
+def get_user_library_branch():
+	employee = frappe.db.get_value(
+		"Employee",
+		{"user_id": frappe.session.user},
+		["name", "employee_name", "school", "branch"],
+		as_dict=True,
+	)
+	if not employee:
+		return {}
+
+	branch = employee.school
+	if not branch and employee.branch and frappe.db.exists("School", employee.branch):
+		branch = employee.branch
+
+	return {
+		"employee": employee.name,
+		"employee_name": employee.employee_name,
+		"branch": branch,
+	}
+
+
+@frappe.whitelist()
+def get_next_accession_number(branch=None):
+	filters = []
+	values = {}
+	if branch:
+		filters.append("branch = %(branch)s")
+		values["branch"] = branch
+	where = " where " + " and ".join(filters) if filters else ""
+	result = frappe.db.sql(
+		f"""
+		select max(cast(accession_number as unsigned))
+		from `tabLibrary Books`
+		{where}
+		{"and" if where else "where"} accession_number regexp '^[0-9]+$'
+		""".replace("where  and", "where"),
+		values,
+	)
+	max_value = cint(result[0][0]) if result and result[0] else 0
+	return str(max_value + 1)
+
+
+def _metadata_from_google(isbn):
+	data = _json_get(
+		"https://www.googleapis.com/books/v1/volumes?"
+		+ urllib.parse.urlencode({"q": f"isbn:{isbn}", "maxResults": 1})
+	)
+	items = data.get("items") or []
+	if not items:
+		return {}
+	info = items[0].get("volumeInfo") or {}
+	identifiers = {i.get("type"): i.get("identifier") for i in info.get("industryIdentifiers") or []}
+	return {
+		"isbn": identifiers.get("ISBN_13") or identifiers.get("ISBN_10") or isbn,
+		"book_name": info.get("title") or "",
+		"author": ", ".join(info.get("authors") or []),
+		"publisher": info.get("publisher") or "",
+		"pages": info.get("pageCount") or "",
+		"language": info.get("language") or "",
+		"year_of_publication": cstr(info.get("publishedDate") or "")[:4],
+		"source": "google_books",
+		"confidence": 85,
+	}
+
+
+def _metadata_from_open_library(isbn):
+	data = _json_get(f"https://openlibrary.org/isbn/{urllib.parse.quote(isbn)}.json")
+	authors = []
+	for author in data.get("authors") or []:
+		key = author.get("key")
+		if not key:
+			continue
+		with suppress(Exception):
+			authors.append(_json_get(f"https://openlibrary.org{key}.json").get("name"))
+	return {
+		"isbn": isbn,
+		"book_name": data.get("title") or "",
+		"author": ", ".join([a for a in authors if a]),
+		"publisher": ", ".join(data.get("publishers") or []),
+		"pages": data.get("number_of_pages") or "",
+		"language": "",
+		"year_of_publication": cstr(data.get("publish_date") or "")[-4:],
+		"source": "open_library",
+		"confidence": 75,
+	}
+
+
+@frappe.whitelist()
+def lookup_book_metadata_by_isbn(isbn):
+	isbn = normalize_isbn(isbn)
+	if not is_valid_isbn(isbn):
+		frappe.throw(_("Invalid ISBN"))
+
+	if not cint(_settings_value("enable_external_metadata_lookup", 1)):
+		return {"isbn": isbn, "source": "manual", "confidence": 0}
+
+	for getter in (_metadata_from_google, _metadata_from_open_library):
+		with suppress(Exception):
+			metadata = getter(isbn)
+			if metadata and metadata.get("book_name"):
+				return metadata
+
+	return {"isbn": isbn, "source": "manual", "confidence": 0}
+
+
+def _call_openai_for_book(front_image=None, back_image=None):
+	if not cint(_settings_value("enable_ai_fallback", 0)):
+		return {}
+
+	api_key = _settings_password("openai_api_key") or os.environ.get("OPENAI_API_KEY")
+	if not api_key:
+		return {}
+
+	model = _settings_value("ai_model", "gpt-5.4-mini")
+	content = [
+		{
+			"type": "input_text",
+			"text": (
+				"Extract library book metadata from these cover images. Return only JSON with keys "
+				"isbn, book_name, author, publisher, pages, language, edition, year_of_publication, "
+				"price, confidence, uncertainty_notes. Use empty strings for unknown fields."
+			),
+		}
+	]
+	for image in (front_image, back_image):
+		if image:
+			content.append({"type": "input_image", "image_url": image})
+
+	payload = {
+		"model": model,
+		"input": [{"role": "user", "content": content}],
+		"text": {"format": {"type": "json_object"}},
+	}
+	req = urllib.request.Request(
+		"https://api.openai.com/v1/responses",
+		data=json.dumps(payload).encode("utf-8"),
+		headers={
+			"Authorization": f"Bearer {api_key}",
+			"Content-Type": "application/json",
+		},
+		method="POST",
+	)
+	with urllib.request.urlopen(req, timeout=30) as response:
+		data = json.loads(response.read().decode("utf-8"))
+
+	text = ""
+	for item in data.get("output") or []:
+		for content_item in item.get("content") or []:
+			if content_item.get("type") in {"output_text", "text"}:
+				text += content_item.get("text") or ""
+	return json.loads(text) if text else {}
+
+
+@frappe.whitelist()
+def extract_book_metadata(front_image=None, back_image=None, branch=None, scanned_code=None):
+	isbn = ""
+	source = "manual"
+	confidence = 0
+
+	for candidate in (scanned_code, front_image, back_image):
+		isbn = extract_isbn_from_text(candidate)
+		if isbn:
+			source = "scanned_isbn"
+			confidence = 95
+			break
+
+	metadata = {}
+	if isbn:
+		metadata = lookup_book_metadata_by_isbn(isbn)
+		source = metadata.get("source") or source
+		confidence = metadata.get("confidence") or confidence
+
+	if not metadata or not metadata.get("book_name"):
+		with suppress(Exception):
+			metadata = _call_openai_for_book(front_image, back_image)
+			if metadata:
+				source = "ai_fallback"
+				confidence = metadata.get("confidence") or 55
+
+	if not metadata:
+		metadata = {}
+
+	if isbn and not metadata.get("isbn"):
+		metadata["isbn"] = isbn
+	metadata.setdefault("branch", branch)
+	metadata["source"] = source
+	metadata["confidence"] = confidence
+	if branch and not metadata.get("accession_number"):
+		metadata["accession_number"] = get_next_accession_number(branch)
+	return metadata
+
+
+def _qr_payload(book):
+	return {
+		"v": 1,
+		"doctype": "Library Books",
+		"book_id": book.name,
+		"accession_number": book.accession_number,
+		"isbn": book.isbn,
+		"title": book.book_name,
+		"author": book.author,
+		"publisher": book.publisher,
+		"branch": book.branch,
+		"room": book.get("room"),
+		"book_shelf": book.get("book_shelf"),
+	}
+
+
+def _qr_image_data(payload):
+	import qrcode
+
+	qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+	qr.add_data(json.dumps(payload, separators=(",", ":")))
+	qr.make(fit=True)
+	image = qr.make_image(fill_color="black", back_color="white")
+	buffer = io.BytesIO()
+	if image.mode != "RGB":
+		image = image.convert("RGB")
+	image.save(buffer, format="PNG")
+	return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+@frappe.whitelist()
+def generate_book_qr(book_name):
+	book = frappe.get_doc("Library Books", book_name)
+	payload = _qr_payload(book)
+	image = _qr_image_data(payload)
+	frappe.db.set_value(
+		"Library Books",
+		book.name,
+		{
+			"qr_code_payload": json.dumps(payload, separators=(",", ":")),
+			"qr_code_image": f'<img src="{image}" alt="{frappe.utils.escape_html(book.book_name)}" />',
+		},
+	)
+	return {"payload": payload, "image": image}
+
+
+@frappe.whitelist()
+def print_book_qr(book_name):
+	return print_book_qr_labels(json.dumps([book_name]))
+
+
+def _qr_img_tag(book):
+	generate_book_qr(book.name)
+	book.reload()
+	return book.qr_code_image
+
+
+def _validate_accession_unique(accession_number, branch, exclude=None):
+	if not accession_number:
+		return
+	filters = {"accession_number": accession_number, "branch": branch}
+	existing = frappe.db.get_value("Library Books", filters, "name")
+	if existing and existing != exclude:
+		frappe.throw(_("Accession number {0} already exists for branch {1}").format(accession_number, branch))
+
+
+@frappe.whitelist()
+def create_library_book_from_preview(payload):
+	payload = _as_dict(payload)
+	branch = payload.get("branch")
+	if not branch:
+		frappe.throw(_("Branch is required"))
+	accession_number = cstr(payload.get("accession_number") or get_next_accession_number(branch))
+	_validate_accession_unique(accession_number, branch)
+
+	isbn = normalize_isbn(payload.get("isbn"))
+	doc = frappe.get_doc(
+		{
+			"doctype": "Library Books",
+			"isbn": isbn or "NO-ISBN",
+			"book_name": payload.get("book_name") or payload.get("title") or _("Untitled Book"),
+			"accession_number": accession_number,
+			"author": payload.get("author") or _("Unknown"),
+			"status": payload.get("status") or "Active",
+			"branch": branch,
+			"room": payload.get("room"),
+			"book_shelf": payload.get("book_shelf"),
+			"pages": payload.get("pages"),
+			"publisher": payload.get("publisher"),
+			"language": payload.get("language"),
+			"price": payload.get("price"),
+			"source_of_book": payload.get("source_of_book"),
+			"quantity": 1,
+			"available_quantity": 1,
+			"call_no": payload.get("call_no"),
+			"edition": payload.get("edition"),
+			"year_of_publication": payload.get("year_of_publication"),
+			"remarks": payload.get("remarks"),
+			"take_home": cint(payload.get("take_home", _settings_value("default_take_home", 1))),
+			"extraction_source": payload.get("source") or payload.get("extraction_source"),
+			"extraction_confidence": payload.get("confidence") or payload.get("extraction_confidence"),
+		}
+	)
+	doc.insert()
+	generate_book_qr(doc.name)
+	doc.reload()
+	return doc.as_dict()
+
+
+def _book_fields():
+	return [
+		"name",
+		"isbn",
+		"book_name",
+		"accession_number",
+		"author",
+		"publisher",
+		"pages",
+		"price",
+		"branch",
+		"room",
+		"book_shelf",
+		"status",
+		"take_home",
+		"quantity",
+		"available_quantity",
+		"qr_code_payload",
+	]
+
+
+def _active_issue_row(book_name):
+	return frappe.db.get_value(
+		"Library Transaction Book",
+		{
+			"library_book": book_name,
+			"book_status": "READING",
+			"parenttype": "Library Transactions",
+		},
+		["name", "parent"],
+		as_dict=True,
+	)
+
+
+def _book_match_row(book, selected_branch=None):
+	book = frappe._dict(book)
+	active_issue = _active_issue_row(book.name)
+	wrong_branch = bool(selected_branch and book.branch and book.branch != selected_branch)
+	branch_missing = bool(selected_branch and not book.branch)
+	is_available = cint(book.available_quantity) > 0
+	stale_unavailable = bool(not is_available and not active_issue)
+
+	if stale_unavailable:
+		frappe.db.set_value("Library Books", book.name, "available_quantity", 1, update_modified=False)
+		book.available_quantity = 1
+		is_available = True
+
+	book["is_active_issue"] = bool(active_issue)
+	book["branch_missing"] = branch_missing
+	book["wrong_branch"] = wrong_branch
+	book["can_issue"] = bool(is_available and not active_issue and not wrong_branch)
+	if active_issue:
+		book["availability_label"] = _("Already Issued")
+		book["issue_reason"] = _("Already issued in transaction {0}").format(active_issue.parent)
+	elif wrong_branch:
+		book["availability_label"] = _("Wrong Branch")
+		book["issue_reason"] = _("Book belongs to branch {0}").format(book.branch)
+	elif branch_missing:
+		book["availability_label"] = _("Available · Branch Missing")
+		book["issue_reason"] = _("Legacy book without branch; allowed for exact accession search")
+	elif is_available:
+		book["availability_label"] = _("Available")
+		book["issue_reason"] = ""
+	else:
+		book["availability_label"] = _("Unavailable")
+		book["issue_reason"] = _("No available quantity")
+	return book
+
+
+@frappe.whitelist()
+def get_books_for_location(branch, room=None, book_shelf=None):
+	if not branch:
+		frappe.throw(_("Branch is required"))
+
+	filters = {"branch": branch}
+	if room:
+		filters["room"] = room
+	if book_shelf:
+		filters["book_shelf"] = book_shelf
+
+	return frappe.get_all(
+		"Library Books",
+		filters=filters,
+		fields=_book_fields(),
+		order_by="cast(accession_number as unsigned) asc, accession_number asc",
+		limit_page_length=500,
+	)
+
+
+def _normalize_book_row(row, branch, room=None, book_shelf=None):
+	row = _as_dict(row)
+	return {
+		"isbn": normalize_isbn(row.get("isbn")) or "NO-ISBN",
+		"book_name": cstr(row.get("book_name") or row.get("title")).strip() or _("Untitled Book"),
+		"accession_number": cstr(row.get("accession_number")).strip(),
+		"author": cstr(row.get("author")).strip() or _("Unknown"),
+		"publisher": cstr(row.get("publisher")).strip(),
+		"pages": cstr(row.get("pages")).strip(),
+		"price": cstr(row.get("price")).strip(),
+		"branch": branch,
+		"room": room,
+		"book_shelf": cstr(book_shelf).strip(),
+		"status": row.get("status") or "Active",
+		"take_home": cint(row.get("take_home", _settings_value("default_take_home", 1))),
+		"quantity": 1,
+		"available_quantity": 1 if row.get("available_quantity") in (None, "") else cint(row.get("available_quantity")),
+	}
+
+
+@frappe.whitelist()
+def save_library_books(rows, branch, room=None, book_shelf=None):
+	rows = _as_list(rows)
+	if not branch:
+		frappe.throw(_("Branch is required"))
+	if not rows:
+		frappe.throw(_("Add at least one book"))
+
+	saved = []
+	next_accession = cint(get_next_accession_number(branch))
+	for raw in rows:
+		raw = _as_dict(raw)
+		if not (raw.get("isbn") or raw.get("book_name") or raw.get("author") or raw.get("publisher") or raw.get("name")):
+			continue
+		values = _normalize_book_row(raw, branch, room, book_shelf)
+		if not values["accession_number"]:
+			values["accession_number"] = str(next_accession)
+			next_accession += 1
+		_validate_accession_unique(values["accession_number"], branch, exclude=raw.get("name"))
+
+		if raw.get("name") and frappe.db.exists("Library Books", raw.get("name")):
+			doc = frappe.get_doc("Library Books", raw.get("name"))
+			was_reading = cint(doc.available_quantity) <= 0
+			for fieldname, value in values.items():
+				if fieldname == "available_quantity" and was_reading:
+					continue
+				doc.set(fieldname, value)
+			doc.save()
+		else:
+			doc = frappe.get_doc({"doctype": "Library Books", **values})
+			doc.insert()
+
+		generate_book_qr(doc.name)
+		doc.reload()
+		saved.append(frappe.db.get_value("Library Books", doc.name, _book_fields(), as_dict=True))
+
+	frappe.db.commit()
+	return saved
+
+
+@frappe.whitelist()
+def print_book_qr_labels(book_names):
+	book_names = _as_list(book_names)
+	if not book_names:
+		frappe.throw(_("Select at least one book"))
+
+	labels = []
+	for name in book_names:
+		book = frappe.get_doc("Library Books", name)
+		qr = _qr_img_tag(book)
+		cells = []
+		for _idx in range(3):
+			cells.append(
+				f"""
+				<div class="label">
+					<div class="qr">{qr}</div>
+					<div class="accession">{frappe.utils.escape_html(book.accession_number or book.name)}</div>
+					<div class="title">{frappe.utils.escape_html(book.book_name or "")}</div>
+					<div class="meta">ISBN: {frappe.utils.escape_html(book.isbn or "-")}</div>
+					<div class="meta">{frappe.utils.escape_html(book.branch or "")}</div>
+					<div class="meta">{frappe.utils.escape_html(book.get("book_shelf") or "")}</div>
+				</div>
+				"""
+			)
+		labels.append(f'<div class="label-row">{"".join(cells)}</div>')
+
+	html = f"""
+	<!doctype html>
+	<html>
+	<head>
+		<title>Library QR Labels</title>
+		<style>
+			@page {{ size: A4; margin: 12mm; }}
+			body {{ font-family: Arial, sans-serif; color: #111827; margin: 0; }}
+			.label-row {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10mm; break-inside: avoid; margin-bottom: 8mm; }}
+			.label {{ border: 1px solid #111827; border-radius: 4px; padding: 6px; text-align: center; min-height: 43mm; }}
+			.qr img {{ width: 24mm; height: 24mm; }}
+			.accession {{ font-size: 14px; font-weight: 800; margin-top: 2px; }}
+			.title {{ font-size: 10px; font-weight: 700; line-height: 1.15; max-height: 24px; overflow: hidden; }}
+			.meta {{ color: #374151; font-size: 9px; line-height: 1.15; }}
+			@media print {{ body {{ margin: 0; }} }}
+		</style>
+	</head>
+	<body onload="window.print()">
+		{"".join(labels)}
+	</body>
+	</html>
+	"""
+	frappe.response.type = "html"
+	frappe.response["body"] = html
+
+
+@frappe.whitelist()
+def resolve_book_matches(identifier, branch=None, room=None, book_shelf=None):
+	identifier = _parse_qr_identifier(identifier)
+	normalized = normalize_isbn(identifier)
+	books = []
+	is_exact_lookup = bool(frappe.db.exists("Library Books", identifier) or identifier != normalized)
+
+	if frappe.db.exists("Library Books", identifier):
+		books = frappe.get_all("Library Books", filters={"name": identifier}, fields=_book_fields(), limit_page_length=1)
+	elif identifier:
+		accession_filters = {"accession_number": identifier}
+		if branch:
+			books = frappe.get_all(
+				"Library Books",
+				filters={**accession_filters, "branch": branch},
+				fields=_book_fields(),
+				order_by="available_quantity desc, modified desc",
+				limit_page_length=20,
+			)
+			if not books:
+				books = frappe.get_all(
+					"Library Books",
+					filters=accession_filters,
+					or_filters=[["Library Books", "branch", "is", "not set"], ["Library Books", "branch", "=", ""]],
+					fields=_book_fields(),
+					order_by="available_quantity desc, modified desc",
+					limit_page_length=20,
+				)
+		else:
+			books = frappe.get_all(
+				"Library Books",
+				filters=accession_filters,
+				fields=_book_fields(),
+				order_by="available_quantity desc, modified desc",
+				limit_page_length=20,
+			)
+
+	if not books and normalized:
+		filters = {"isbn": normalized}
+		if room:
+			filters["room"] = room
+		if book_shelf:
+			filters["book_shelf"] = book_shelf
+		books = frappe.get_all(
+			"Library Books",
+			filters=filters,
+			fields=_book_fields(),
+			order_by="available_quantity desc, cast(accession_number as unsigned) asc, accession_number asc",
+			limit_page_length=50,
+		)
+
+	books = [_book_match_row(book, branch) for book in books]
+	if is_exact_lookup and branch:
+		for book in books:
+			if book.branch_missing:
+				book.can_issue = bool(not book.is_active_issue and cint(book.available_quantity) > 0)
+	if not books:
+		frappe.throw(_("No available matching book found"))
+	return books
+
+
+def _parse_qr_identifier(identifier):
+	identifier = cstr(identifier).strip()
+	with suppress(Exception):
+		payload = json.loads(identifier)
+		if payload.get("doctype") == "Library Books":
+			return payload.get("book_id") or payload.get("id") or payload.get("accession_number") or payload.get("isbn")
+		if payload.get("id") or payload.get("accession_number") or payload.get("isbn"):
+			return payload.get("id") or payload.get("accession_number") or payload.get("isbn")
+	return identifier
+
+
+@frappe.whitelist()
+def resolve_student(identifier, branch=None):
+	identifier = cstr(identifier).strip()
+	with suppress(Exception):
+		parts = identifier.split("/")
+		if len(parts) >= 3:
+			branch = branch or parts[-2]
+			identifier = parts[-1]
+
+	if frappe.db.exists("Student", identifier):
+		filters = {"name": identifier}
+	else:
+		filters = {"reference_number": identifier}
+	if branch:
+		filters["school"] = branch
+	student = frappe.db.get_value(
+		"Student",
+		filters,
+		["name", "student_name", "first_name", "middle_name", "last_name", "reference_number", "program", "school", "image", "user"],
+		as_dict=True,
+	)
+	if not student:
+		frappe.throw(_("No student found for reference number {0}").format(identifier))
+
+	student["display_name"] = student.student_name or " ".join(
+		[p for p in [student.first_name, student.middle_name, student.last_name] if p]
+	)
+	student["active_books"] = frappe.get_all(
+		"Library Transaction Book",
+		filters={"book_status": "READING", "parenttype": "Library Transactions"},
+		or_filters=[],
+		fields=["name", "parent", "library_book", "accession_number", "book_name", "author", "due_date"],
+	)
+	student["active_books"] = [
+		row
+		for row in student["active_books"]
+		if frappe.db.get_value("Library Transactions", row.parent, "student") == student.name
+	]
+	student["issued_count"] = len(student["active_books"])
+	student["overdue_count"] = len([row for row in student["active_books"] if row.due_date and getdate(row.due_date) < getdate(today())])
+	return student
+
+
+@frappe.whitelist()
+def resolve_book(identifier, branch=None, require_available=False):
+	identifier = _parse_qr_identifier(identifier)
+	filters = {}
+	if frappe.db.exists("Library Books", identifier):
+		filters["name"] = identifier
+	else:
+		filters = {"accession_number": identifier}
+		if not frappe.db.exists("Library Books", filters):
+			filters = {"isbn": normalize_isbn(identifier)}
+	if branch:
+		filters["branch"] = branch
+
+	books = frappe.get_all(
+		"Library Books",
+		filters=filters,
+		fields=[
+			"name",
+			"isbn",
+			"book_name",
+			"accession_number",
+			"author",
+			"publisher",
+			"branch",
+			"room",
+			"book_shelf",
+			"status",
+			"take_home",
+			"quantity",
+			"available_quantity",
+		],
+		order_by="available_quantity desc, accession_number asc",
+		limit_page_length=20,
+	)
+	if require_available:
+		books = [book for book in books if cint(book.available_quantity) > 0]
+	if not books:
+		frappe.throw(_("No matching book found"))
+	return books[0] if len(books) == 1 else {"matches": books}
+
+
+def _loan_period():
+	return cint(_settings_value("loan_period", 7)) or 7
+
+
+def _book_child_from_doc(book, issue_date=None, due_date=None, status="READING"):
+	issue_date = issue_date or today()
+	due_date = due_date or add_days(issue_date, _loan_period())
+	return {
+		"library_book": book.name,
+		"isbn": book.isbn,
+		"accession_number": book.accession_number,
+		"book_name": book.book_name,
+		"author": book.author,
+		"publisher": book.publisher,
+		"issue_date": issue_date,
+		"due_date": due_date,
+		"book_status": status,
+	}
+
+
+def _assert_can_issue(book, branch=None):
+	if book.status != "Active":
+		frappe.throw(_("{0} is not active").format(book.book_name))
+	if not cint(book.take_home):
+		frappe.throw(_("{0} is not allowed for home reading").format(book.book_name))
+	if branch and book.branch != branch and _settings_value("branch_override_role", "System Manager") not in frappe.get_roles():
+		frappe.throw(_("{0} belongs to branch {1}").format(book.book_name, book.branch))
+	if cint(book.available_quantity) <= 0:
+		frappe.throw(_("{0} is not available").format(book.book_name))
+
+
+def sync_student_library_books(student, transaction=None):
+	student_doc = frappe.get_doc("Student", student)
+	rows_by_key = {}
+	for row in student_doc.get("custom_library_books") or []:
+		key = (row.get("library_transaction"), row.get("library_transaction_book"))
+		if all(key):
+			rows_by_key[key] = row
+
+	if transaction:
+		transactions = [transaction]
+	else:
+		transactions = frappe.get_all("Library Transactions", filters={"student": student}, pluck="name")
+		transactions = [frappe.get_doc("Library Transactions", name) for name in transactions]
+
+	for txn in transactions:
+		if isinstance(txn, str):
+			txn = frappe.get_doc("Library Transactions", txn)
+		for line in txn.get("books") or []:
+			key = (txn.name, line.name)
+			row = rows_by_key.get(key)
+			if not row and line.book_status == "READING":
+				row = student_doc.append("custom_library_books", {})
+				row.library_transaction = txn.name
+				row.library_transaction_book = line.name
+			if not row:
+				continue
+			row.book_id = line.isbn or line.accession_number or line.library_book
+			row.book_name = line.book_name
+			row.author = line.author
+			row.reference_number = line.accession_number
+			row.book_issue_date = line.issue_date
+			row.book_return_date = line.return_date
+			row.reading_period = f"{date_diff(line.due_date, line.issue_date)} days" if line.issue_date and line.due_date else ""
+			row.book_status = line.book_status
+			row.due__days = (
+				f"{date_diff(today(), line.due_date)} days"
+				if line.book_status == "READING" and line.due_date and getdate(line.due_date) < getdate(today())
+				else "0 days"
+			)
+			row.take_home = 1
+
+	student_doc.custom_number_of_books_issued = str(
+		len([row for row in student_doc.get("custom_library_books") or [] if row.book_status == "READING"])
+	)
+	student_doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def create_issue_transaction(student, books, branch=None):
+	books = _as_list(books)
+	if not student:
+		frappe.throw(_("Student is required"))
+	if not books:
+		frappe.throw(_("Add at least one book"))
+
+	seen = set()
+	tx = frappe.new_doc("Library Transactions")
+	tx.student = student
+	student_info = frappe.db.get_value("Student", student, ["user", "program", "school"], as_dict=True)
+	if student_info:
+		tx.student_email = student_info.user
+		tx.classs = student_info.program
+		tx.branch = branch or student_info.school
+	branch = branch or tx.branch
+
+	for raw in books:
+		identifier = raw.get("library_book") or raw.get("name") or raw.get("accession_number") or raw.get("isbn")
+		book_name = resolve_book(identifier, branch=branch, require_available=True)
+		if isinstance(book_name, dict) and book_name.get("matches"):
+			book_name = book_name["matches"][0]
+		book = frappe.get_doc("Library Books", book_name.name)
+		if book.name in seen:
+			frappe.throw(_("Book {0} is already added").format(book.book_name))
+		seen.add(book.name)
+		_assert_can_issue(book, branch)
+		tx.append("books", _book_child_from_doc(book, raw.get("issue_date"), raw.get("due_date")))
+
+	tx.insert()
+	frappe.db.commit()
+	return tx.as_dict()
+
+
+@frappe.whitelist()
+def return_books(student=None, books=None, branch=None):
+	books = _as_list(books)
+	if not books:
+		frappe.throw(_("Select at least one book to return"))
+
+	identifiers = {_parse_qr_identifier(item.get("library_book") or item.get("name") or item.get("accession_number") or item.get("isbn")) for item in books}
+	updated_transactions = set()
+
+	active_rows = frappe.get_all(
+		"Library Transaction Book",
+		filters={"book_status": "READING", "parenttype": "Library Transactions"},
+		fields=["name", "parent", "library_book", "isbn", "accession_number"],
+		limit_page_length=500,
+	)
+	for row in active_rows:
+		parent_student = frappe.db.get_value("Library Transactions", row.parent, "student")
+		if student and parent_student != student:
+			continue
+		if not ({row.library_book, row.isbn, row.accession_number} & identifiers):
+			continue
+		frappe.db.set_value("Library Transaction Book", row.name, {"book_status": "RETURNED", "return_date": today()})
+		frappe.db.set_value("Library Books", row.library_book, "available_quantity", 1)
+		updated_transactions.add(row.parent)
+
+	if not updated_transactions:
+		frappe.throw(_("No active issued books matched"))
+
+	for txn in updated_transactions:
+		transaction = frappe.get_doc("Library Transactions", txn)
+		sync_student_library_books(transaction.student, transaction)
+	frappe.db.commit()
+	return {"returned": len(updated_transactions), "transactions": list(updated_transactions)}
+
+
+@frappe.whitelist()
+def update_all_due_days():
+	for txn in frappe.get_all("Library Transactions", fields=["name", "student"]):
+		sync_student_library_books(txn.student, txn.name)

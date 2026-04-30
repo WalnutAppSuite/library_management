@@ -1,7 +1,14 @@
 # Copyright (c) 2025, Frappe and Contributors
 # See license.txt
 
-# import frappe
 from frappe.tests.utils import FrappeTestCase
+
+from library_management.services import extract_isbn_from_text
+
+
 class TestLibraryTransactions(FrappeTestCase):
-	pass
+	def test_extract_isbn_from_scanned_text(self):
+		self.assertEqual(
+			extract_isbn_from_text("Book barcode ISBN 978-0-306-40615-7"),
+			"9780306406157",
+		)

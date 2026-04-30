@@ -17,7 +17,9 @@
   "column_break_vyxp",
   "book_status",
   "due__days",
-  "take_home"
+  "take_home",
+  "library_transaction",
+  "library_transaction_book"
  ],
  "fields": [
   {
@@ -90,13 +92,26 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Take Home"
+  },
+  {
+   "fieldname": "library_transaction",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Library Transaction",
+   "options": "Library Transactions"
+  },
+  {
+   "fieldname": "library_transaction_book",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Library Transaction Book Row"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-05-22 15:46:30.463437",
+ "modified": "2026-04-30 07:03:57.342321",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Books Student Table",
