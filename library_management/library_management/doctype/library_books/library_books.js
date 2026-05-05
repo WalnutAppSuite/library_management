@@ -22,10 +22,17 @@ frappe.ui.form.on("Library Books", {
 			});
 		});
 
-		frm.add_custom_button(__("Print QR"), () => {
-			const payload = encodeURIComponent(JSON.stringify([frm.doc.name]));
-			const url = `/api/method/library_management.services.print_book_qr_labels?book_names=${payload}`;
-			window.open(url, "_blank");
+		frm.add_custom_button(__("Print QR"), async () => {
+			const r = await frappe.call({
+				method: "library_management.services.print_book_qr_labels",
+				args: { book_names: [frm.doc.name] },
+				freeze: true,
+				freeze_message: __("Preparing QR"),
+			});
+			if (r.message) {
+				const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
+				window.open(URL.createObjectURL(blob), "_blank");
+			}
 		});
 	},
 

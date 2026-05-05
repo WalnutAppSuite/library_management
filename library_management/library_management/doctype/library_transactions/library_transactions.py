@@ -6,7 +6,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_days, cint, getdate, today
 
-from library_management.services import _loan_period, sync_student_library_books
+from library_management.services import _loan_period, _update_student_book_count
 
 
 class LibraryTransactions(Document):
@@ -17,11 +17,11 @@ class LibraryTransactions(Document):
 
 	def after_insert(self):
 		self.update_book_inventory()
-		sync_student_library_books(self.student, self)
+		_update_student_book_count(self.student)
 
 	def on_update(self):
 		self.update_book_inventory()
-		sync_student_library_books(self.student, self)
+		_update_student_book_count(self.student)
 
 	def validate_student_details(self):
 		if not self.student:
@@ -127,8 +127,3 @@ class LibraryTransactions(Document):
 			frappe.db.set_value("Library Books", row.library_book, "available_quantity", available)
 
 
-def update_all_due_days():
-	"""Compatibility hook for old scheduler references."""
-	from library_management.services import update_all_due_days as update_rows
-
-	return update_rows()

@@ -212,14 +212,22 @@ frappe.pages["library-book-intake"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Books saved"), indicator: "green" });
 	}
 
-	function printLabels() {
+	async function printLabels() {
 		const bookNames = Array.from(state.selected);
 		if (!bookNames.length) {
 			frappe.msgprint(__("Select saved books to print QR labels."));
 			return;
 		}
-		const payload = encodeURIComponent(JSON.stringify(bookNames));
-		window.open(`/api/method/library_management.services.print_book_qr_labels?book_names=${payload}`, "_blank");
+		const r = await frappe.call({
+			method: "library_management.services.print_book_qr_labels",
+			args: { book_names: bookNames },
+			freeze: true,
+			freeze_message: __("Preparing QR labels..."),
+		});
+		if (r.message) {
+			const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
+			window.open(URL.createObjectURL(blob), "_blank");
+		}
 	}
 
 	function renderRows() {

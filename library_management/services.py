@@ -9,7 +9,7 @@ from contextlib import suppress
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, cstr, date_diff, getdate, nowdate, today
+from frappe.utils import add_days, cint, cstr, getdate, today
 
 
 ISBN_RE = re.compile(r"(?:(?:97[89])[\-\s]?)?(?:\d[\-\s]?){9}[\dXx]")
@@ -189,7 +189,7 @@ def _metadata_from_open_library(isbn):
 def lookup_book_metadata_by_isbn(isbn):
 	isbn = normalize_isbn(isbn)
 	if not is_valid_isbn(isbn):
-		frappe.throw(_("Invalid ISBN"))
+		return {"isbn": isbn, "source": "manual", "confidence": 0}
 
 	if not cint(_settings_value("enable_external_metadata_lookup", 1)):
 		return {"isbn": isbn, "source": "manual", "confidence": 0}
@@ -596,8 +596,7 @@ def print_book_qr_labels(book_names):
 	</body>
 	</html>
 	"""
-	frappe.response.type = "html"
-	frappe.response["body"] = html
+	return html
 
 
 @frappe.whitelist()
@@ -612,40 +611,26 @@ def resolve_book_matches(identifier, branch=None, room=None, book_shelf=None):
 	elif identifier:
 		accession_filters = {"accession_number": identifier}
 		if branch:
-			books = frappe.get_all(
-				"Library Books",
-				filters={**accession_filters, "branch": branch},
-				fields=_book_fields(),
-				order_by="available_quantity desc, modified desc",
-				limit_page_length=20,
-			)
-			if not books:
-				books = frappe.get_all(
-					"Library Books",
-					filters=accession_filters,
-					or_filters=[["Library Books", "branch", "is", "not set"], ["Library Books", "branch", "=", ""]],
-					fields=_book_fields(),
-					order_by="available_quantity desc, modified desc",
-					limit_page_length=20,
-				)
-		else:
-			books = frappe.get_all(
-				"Library Books",
-				filters=accession_filters,
-				fields=_book_fields(),
-				order_by="available_quantity desc, modified desc",
-				limit_page_length=20,
-			)
-
-	if not books and normalized:
-		filters = {"isbn": normalized}
-		if room:
-			filters["room"] = room
-		if book_shelf:
-			filters["book_shelf"] = book_shelf
+			accession_filters["branch"] = branch
 		books = frappe.get_all(
 			"Library Books",
-			filters=filters,
+			filters=accession_filters,
+			fields=_book_fields(),
+			order_by="available_quantity desc, modified desc",
+			limit_page_length=20,
+		)
+
+	if not books and normalized:
+		isbn_filters = {"isbn": normalized}
+		if room:
+			isbn_filters["room"] = room
+		if book_shelf:
+			isbn_filters["book_shelf"] = book_shelf
+		if branch:
+			isbn_filters["branch"] = branch
+		books = frappe.get_all(
+			"Library Books",
+			filters=isbn_filters,
 			fields=_book_fields(),
 			order_by="available_quantity desc, cast(accession_number as unsigned) asc, accession_number asc",
 			limit_page_length=50,
@@ -699,17 +684,20 @@ def resolve_student(identifier, branch=None):
 	student["display_name"] = student.student_name or " ".join(
 		[p for p in [student.first_name, student.middle_name, student.last_name] if p]
 	)
-	student["active_books"] = frappe.get_all(
-		"Library Transaction Book",
-		filters={"book_status": "READING", "parenttype": "Library Transactions"},
-		or_filters=[],
-		fields=["name", "parent", "library_book", "accession_number", "book_name", "author", "due_date"],
+	student["active_books"] = frappe.db.sql(
+		"""
+		SELECT ltb.name, lt.name AS parent, ltb.library_book,
+		       ltb.accession_number, ltb.book_name, ltb.author, ltb.due_date
+		FROM `tabLibrary Transaction Book` ltb
+		JOIN `tabLibrary Transactions` lt ON lt.name = ltb.parent
+		WHERE lt.student = %(student)s
+		  AND ltb.book_status = 'READING'
+		  AND ltb.parenttype = 'Library Transactions'
+		ORDER BY ltb.due_date ASC
+		""",
+		{"student": student.name},
+		as_dict=True,
 	)
-	student["active_books"] = [
-		row
-		for row in student["active_books"]
-		if frappe.db.get_value("Library Transactions", row.parent, "student") == student.name
-	]
 	student["issued_count"] = len(student["active_books"])
 	student["overdue_count"] = len([row for row in student["active_books"] if row.due_date and getdate(row.due_date) < getdate(today())])
 	return student
@@ -787,51 +775,19 @@ def _assert_can_issue(book, branch=None):
 		frappe.throw(_("{0} is not available").format(book.book_name))
 
 
-def sync_student_library_books(student, transaction=None):
-	student_doc = frappe.get_doc("Student", student)
-	rows_by_key = {}
-	for row in student_doc.get("custom_library_books") or []:
-		key = (row.get("library_transaction"), row.get("library_transaction_book"))
-		if all(key):
-			rows_by_key[key] = row
-
-	if transaction:
-		transactions = [transaction]
-	else:
-		transactions = frappe.get_all("Library Transactions", filters={"student": student}, pluck="name")
-		transactions = [frappe.get_doc("Library Transactions", name) for name in transactions]
-
-	for txn in transactions:
-		if isinstance(txn, str):
-			txn = frappe.get_doc("Library Transactions", txn)
-		for line in txn.get("books") or []:
-			key = (txn.name, line.name)
-			row = rows_by_key.get(key)
-			if not row and line.book_status == "READING":
-				row = student_doc.append("custom_library_books", {})
-				row.library_transaction = txn.name
-				row.library_transaction_book = line.name
-			if not row:
-				continue
-			row.book_id = line.isbn or line.accession_number or line.library_book
-			row.book_name = line.book_name
-			row.author = line.author
-			row.reference_number = line.accession_number
-			row.book_issue_date = line.issue_date
-			row.book_return_date = line.return_date
-			row.reading_period = f"{date_diff(line.due_date, line.issue_date)} days" if line.issue_date and line.due_date else ""
-			row.book_status = line.book_status
-			row.due__days = (
-				f"{date_diff(today(), line.due_date)} days"
-				if line.book_status == "READING" and line.due_date and getdate(line.due_date) < getdate(today())
-				else "0 days"
-			)
-			row.take_home = 1
-
-	student_doc.custom_number_of_books_issued = str(
-		len([row for row in student_doc.get("custom_library_books") or [] if row.book_status == "READING"])
-	)
-	student_doc.save(ignore_permissions=True)
+def _update_student_book_count(student_name):
+	count = frappe.db.sql(
+		"""
+		SELECT COUNT(*)
+		FROM `tabLibrary Transaction Book` ltb
+		JOIN `tabLibrary Transactions` lt ON lt.name = ltb.parent
+		WHERE lt.student = %s
+		  AND ltb.book_status = 'READING'
+		  AND ltb.parenttype = 'Library Transactions'
+		""",
+		student_name,
+	)[0][0]
+	frappe.db.set_value("Student", student_name, "custom_number_of_books_issued", str(count))
 
 
 @frappe.whitelist()
@@ -897,14 +853,25 @@ def return_books(student=None, books=None, branch=None):
 	if not updated_transactions:
 		frappe.throw(_("No active issued books matched"))
 
-	for txn in updated_transactions:
-		transaction = frappe.get_doc("Library Transactions", txn)
-		sync_student_library_books(transaction.student, transaction)
+	updated_students = {
+		frappe.db.get_value("Library Transactions", txn, "student") for txn in updated_transactions
+	}
+	for student_name in updated_students:
+		_update_student_book_count(student_name)
 	frappe.db.commit()
 	return {"returned": len(updated_transactions), "transactions": list(updated_transactions)}
 
 
 @frappe.whitelist()
 def update_all_due_days():
-	for txn in frappe.get_all("Library Transactions", fields=["name", "student"]):
-		sync_student_library_books(txn.student, txn.name)
+	students = frappe.db.sql(
+		"""
+		SELECT DISTINCT lt.student
+		FROM `tabLibrary Transactions` lt
+		JOIN `tabLibrary Transaction Book` ltb ON ltb.parent = lt.name
+		WHERE ltb.book_status = 'READING' AND ltb.parenttype = 'Library Transactions'
+		""",
+		as_dict=True,
+	)
+	for row in students:
+		_update_student_book_count(row.student)

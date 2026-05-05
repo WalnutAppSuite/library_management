@@ -34,7 +34,6 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 					<div id="book-form"></div>
 					<div class="actions">
 						<button class="btn btn-default" id="add-book">${__("Find Book")}</button>
-						<button class="btn btn-issue" id="submit-issue">${__("Issue Books")}</button>
 					</div>
 					<div class="table-responsive">
 						<table class="table counter-table">
@@ -53,6 +52,9 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 						</table>
 					</div>
 					<div class="empty-note" id="issue-empty">${__("No books added yet.")}</div>
+					<div class="actions">
+						<button class="btn btn-issue" id="submit-issue">${__("Issue Books")}</button>
+					</div>
 				</div>
 				<div class="panel">
 					<div class="section-title">${__("Active Issued Books")}</div>
@@ -86,6 +88,9 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		],
 	});
 	bookForm.make();
+	bookForm.get_field("book_identifier").$input.on("keydown", function (e) {
+		if (e.key === "Enter") findBook(bookForm.get_value("book_identifier"));
+	});
 
 	bootstrap();
 
