@@ -112,10 +112,13 @@ def get_user_library_branch():
 	if not branch and employee.branch and frappe.db.exists("School", employee.branch):
 		branch = employee.branch
 
+	is_ho = not branch or cstr(branch).strip().upper() == "HO" or not frappe.db.exists("School", branch)
+
 	return {
 		"employee": employee.name,
 		"employee_name": employee.employee_name,
-		"branch": branch,
+		"branch": "" if is_ho else branch,
+		"is_ho": is_ho,
 	}
 
 
@@ -291,6 +294,10 @@ def extract_book_metadata(front_image=None, back_image=None, branch=None, scanne
 
 
 def _qr_payload(book):
+	# Validate that either accession_number or isbn is present
+	if not (book.accession_number or book.isbn):
+		frappe.throw(_("This book does not have an accession number or ISBN number. It is required for QR generation."))
+	
 	return {
 		"v": 1,
 		"doctype": "Library Books",
@@ -554,48 +561,237 @@ def print_book_qr_labels(book_names):
 	if not book_names:
 		frappe.throw(_("Select at least one book"))
 
-	labels = []
+	book_names = [name for name in _as_list(book_names)]
+
+	# Generate QR codes and book info only for books with accession numbers.
+	books_with_qr = []
 	for name in book_names:
 		book = frappe.get_doc("Library Books", name)
-		qr = _qr_img_tag(book)
-		cells = []
-		for _idx in range(3):
-			cells.append(
-				f"""
-				<div class="label">
-					<div class="qr">{qr}</div>
-					<div class="accession">{frappe.utils.escape_html(book.accession_number or book.name)}</div>
-					<div class="title">{frappe.utils.escape_html(book.book_name or "")}</div>
-					<div class="meta">ISBN: {frappe.utils.escape_html(book.isbn or "-")}</div>
-					<div class="meta">{frappe.utils.escape_html(book.branch or "")}</div>
-					<div class="meta">{frappe.utils.escape_html(book.get("book_shelf") or "")}</div>
-				</div>
-				"""
-			)
-		labels.append(f'<div class="label-row">{"".join(cells)}</div>')
+		if not book.accession_number:
+			continue
+		books_with_qr.append({
+			"qr": _qr_img_tag(book),
+			"accession": frappe.utils.escape_html(book.accession_number),
+			"title": frappe.utils.escape_html(book.book_name[:30]) if book.book_name else "",
+		})
 
-	html = f"""
-	<!doctype html>
+	# Generate grid layout: Each row contains 2 books with 3 QR codes each (6 QR codes per row)
+	html_rows = []
+	for i in range(0, len(books_with_qr), 2):
+		left = books_with_qr[i]
+		right = books_with_qr[i + 1] if i + 1 < len(books_with_qr) else None
+		row_html = '<div class="book-row">'
+		for book_item in (left, right):
+			if not book_item:
+				continue
+			row_html += f'''
+			<div class="book-block">
+				<div class="qr-container">
+					<div class="qr-item">
+						{book_item["qr"]}
+						<div class="qr-accession">{book_item["accession"]}</div>
+					</div>
+					<div class="qr-item">
+						{book_item["qr"]}
+						<div class="qr-accession">{book_item["accession"]}</div>
+					</div>
+					<div class="qr-item">
+						{book_item["qr"]}
+						<div class="qr-accession">{book_item["accession"]}</div>
+					</div>
+				</div>
+				<div class="book-info">
+					<div class="book-title">{book_item["title"]}</div>
+				</div>
+			</div>
+			'''
+		row_html += '</div>'
+		html_rows.append(row_html)
+
+	html = f"""<!doctype html>
 	<html>
 	<head>
-		<title>Library QR Labels</title>
+		<meta charset="UTF-8">
+		<title>Library QR Labels - Print Preview</title>
 		<style>
-			@page {{ size: A4; margin: 12mm; }}
-			body {{ font-family: Arial, sans-serif; color: #111827; margin: 0; }}
-			.label-row {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10mm; break-inside: avoid; margin-bottom: 8mm; }}
-			.label {{ border: 1px solid #111827; border-radius: 4px; padding: 6px; text-align: center; min-height: 43mm; }}
-			.qr img {{ width: 24mm; height: 24mm; }}
-			.accession {{ font-size: 14px; font-weight: 800; margin-top: 2px; }}
-			.title {{ font-size: 10px; font-weight: 700; line-height: 1.15; max-height: 24px; overflow: hidden; }}
-			.meta {{ color: #374151; font-size: 9px; line-height: 1.15; }}
-			@media print {{ body {{ margin: 0; }} }}
+			@page {{
+				size: A4;
+				margin: 5mm;
+			}}
+			* {{
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}}
+			html, body {{
+				width: 100%;
+				height: 100%;
+			}}
+			body {{
+				font-family: Arial, sans-serif;
+				color: #111827;
+				background: #f5f5f5;
+				padding: 20px;
+			}}
+			.print-container {{
+				background: white;
+				max-width: 210mm;
+				height: auto;
+				margin: 0 auto;
+				padding: 3mm;
+				box-shadow: none;
+				display: flex;
+				flex-direction: column;
+			}}
+			.print-header {{
+				text-align: center;
+				margin-bottom: 5mm;
+				padding-bottom: 3mm;
+			}}
+			.print-header h2 {{
+				font-size: 14px;
+				margin: 0;
+			}}
+			.print-content {{
+				flex: 1;
+				overflow-y: auto;
+			}}
+			.print-actions {{
+				text-align: center;
+				margin-top: 6mm;
+				padding-top: 6mm;
+			}}
+			.print-actions button {{
+				padding: 6px 14px;
+				margin: 0 4px;
+				font-size: 13px;
+				cursor: pointer;
+				border: none;
+				border-radius: 4px;
+				background: #0066cc;
+				color: white;
+			}}
+			.print-actions button.cancel {{
+				background: #6c757d;
+			}}
+			.print-actions button.cancel:hover {{
+				background: #5a6268;
+			}}
+			.book-row {{
+				display: flex;
+				flex-direction: row;
+				justify-content: space-between;
+				align-items: flex-start;
+				border: none;
+				padding: 0;
+				gap: 4mm;
+				margin-bottom: 2mm;
+				page-break-inside: avoid;
+				width: 100%;
+			}}
+			.book-block {{
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: flex-start;
+				flex: 1;
+				border: none;
+				padding: 0;
+				gap: 1mm;
+			}}
+			.qr-container {{
+				display: flex;
+				gap: 1.5mm;
+				justify-content: center;
+				align-items: center;
+				width: 100%;
+				flex-wrap: nowrap;
+			}}
+			.qr-item {{
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: flex-start;
+				width: 22mm;
+				height: auto;
+				border: none;
+				flex-shrink: 0;
+			}}
+			.qr-item img {{
+				width: 22mm;
+				height: 22mm;
+				object-fit: contain;
+				image-rendering: crisp-edges;
+				-webkit-print-color-adjust: exact;
+				print-color-adjust: exact;
+			}}
+			.book-info {{
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 0.5mm;
+				width: 100%;
+			}}
+			.book-title {{
+				font-size: 6px;
+				color: #666;
+				text-align: center;
+				word-break: break-word;
+				max-width: 70mm;
+				max-height: 6mm;
+				overflow: hidden;
+				line-height: 1.1;
+			}}
+			.qr-accession {{
+				font-size: 7px;
+				font-weight: 700;
+				text-align: center;
+				margin-top: 1mm;
+				word-break: break-all;
+				max-width: 18mm;
+				line-height: 1.1;
+			}}
+			@media print {{
+				body {{
+					background: white;
+					padding: 0;
+					margin: 0;
+				}}
+				.print-container {{
+					max-width: none;
+					height: auto;
+					box-shadow: none;
+					margin: 0;
+					padding: 5mm;
+				}}
+				.print-header {{
+					display: none;
+				}}
+				.print-actions {{
+					display: none;
+				}}
+				.book-row {{
+					margin-bottom: 2mm;
+				}}
+			}}
 		</style>
 	</head>
-	<body onload="window.print()">
-		{"".join(labels)}
+	<body>
+		<div class="print-container">
+			<div class="print-header">
+				<h2>Library QR Labels - Print Preview</h2>
+				<p style="font-size: 12px; color: #666; margin-top: 5px;">Total Books: {len(books_with_qr)}</p>
+			</div>
+			<div class="print-content">
+				{"".join(html_rows)}
+			</div>
+			<div class="print-actions">
+				<button onclick="window.print()">Print</button>
+				<button class="cancel" onclick="window.close()">Close</button>
+			</div>
+		</div>
 	</body>
-	</html>
-	"""
+	</html>"""
 	return html
 
 

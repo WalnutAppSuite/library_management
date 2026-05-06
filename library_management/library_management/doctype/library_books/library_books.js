@@ -19,19 +19,35 @@ frappe.ui.form.on("Library Books", {
 						frm.reload_doc();
 					}
 				},
+				error: (error) => {
+					frappe.msgprint({
+						title: __("QR Generation Error"),
+						message: __("This book does not have an accession number or ISBN number. It is required for QR generation."),
+						indicator: "red"
+					});
+				}
 			});
 		});
 
 		frm.add_custom_button(__("Print QR"), async () => {
-			const r = await frappe.call({
-				method: "library_management.services.print_book_qr_labels",
-				args: { book_names: [frm.doc.name] },
-				freeze: true,
-				freeze_message: __("Preparing QR"),
-			});
-			if (r.message) {
-				const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
-				window.open(URL.createObjectURL(blob), "_blank");
+			try {
+				const r = await frappe.call({
+					method: "library_management.services.print_book_qr_labels",
+					args: { book_names: [frm.doc.name] },
+					freeze: true,
+					freeze_message: __("Preparing QR"),
+				});
+				if (r.message) {
+					const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
+					const url = URL.createObjectURL(blob);
+					window.open(url, "_blank", "width=900,height=1000,menubar=yes,toolbar=yes");
+				}
+			} catch (error) {
+				frappe.msgprint({
+					title: __("QR Generation Error"),
+					message: error.responseText || __("Unable to generate QR code. Please ensure the book has an accession number or ISBN."),
+					indicator: "red"
+				});
 			}
 		});
 	},

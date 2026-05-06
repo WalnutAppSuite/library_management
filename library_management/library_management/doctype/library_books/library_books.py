@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import get_link_to_form
 
 
 class LibraryBooks(Document):
@@ -13,15 +14,18 @@ class LibraryBooks(Document):
 		if self.available_quantity is None:
 			self.available_quantity = self.quantity
 		if self.accession_number and self.branch:
-			existing = frappe.db.get_value(
+			existing = frappe.get_value(
 				"Library Books",
 				{"accession_number": self.accession_number, "branch": self.branch},
-				"name",
+				["name", "book_name"],
+				as_dict=True,
 			)
-			if existing and existing != self.name:
+			if existing and existing.name != self.name:
+				book_link = get_link_to_form("Library Books", existing.name)
 				frappe.throw(
-					_("Accession number {0} already exists for branch {1}").format(
+					_("Accession number {0} already exists for branch {1} and is already linked with book {2}.").format(
 						self.accession_number,
 						self.branch,
+						book_link,
 					)
 				)

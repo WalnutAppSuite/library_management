@@ -9,6 +9,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		branch: "",
 		student: null,
 		issueBooks: [],
+		_fetching: false,
 	};
 
 	page.main.html(`
@@ -76,6 +77,12 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		],
 	});
 	studentForm.make();
+	studentForm.get_field("reference_number").$input.on("keydown", function (e) {
+		if (e.key === "Enter") {
+			const val = studentForm.get_value("reference_number");
+			if (val) fetchStudent(val);
+		}
+	});
 	studentForm.get_field("student").get_query = () => {
 		const branch = studentForm.get_value("branch");
 		return branch ? { filters: { school: branch } } : {};
@@ -109,7 +116,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 
 	async function bootstrap() {
 		const r = await frappe.call("library_management.services.get_user_library_branch");
-		if (r.message && r.message.branch) {
+		if (r.message && r.message.branch && !r.message.is_ho) {
 			state.branch = r.message.branch;
 			studentForm.set_value("branch", state.branch);
 			page.main.find("#branch-pill").text(state.branch);
@@ -139,22 +146,30 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 	}
 
 	async function fetchStudent(identifier) {
+		if (state._fetching) return;
 		const branch = studentForm.get_value("branch");
 		if (!identifier) {
 			frappe.msgprint(__("Select a student or enter reference number."));
 			return;
 		}
-		const r = await frappe.call("library_management.services.resolve_student", { identifier, branch });
-		state.student = r.message;
-		studentForm.set_value("student", state.student.name);
-		studentForm.set_value("reference_number", state.student.reference_number || "");
-		state.branch = branch || state.student.school || "";
-		if (state.branch) {
-			studentForm.set_value("branch", state.branch);
-			page.main.find("#branch-pill").text(state.branch);
+		state._fetching = true;
+		try {
+			const r = await frappe.call("library_management.services.resolve_student", { identifier, branch });
+			state.student = r.message;
+			studentForm.set_value("student", state.student.name);
+			studentForm.set_value("reference_number", state.student.reference_number || "");
+			state.branch = branch || state.student.school || "";
+			if (state.branch) {
+				studentForm.set_value("branch", state.branch);
+				page.main.find("#branch-pill").text(state.branch);
+			}
+			renderStudent();
+			renderReturns();
+		} finally {
+			// Keep guard active for 600ms so Frappe's async validate_link callbacks
+			// (fired after set_value on the Link field) don't re-trigger fetchStudent.
+			setTimeout(() => { state._fetching = false; }, 600);
 		}
-		renderStudent();
-		renderReturns();
 	}
 
 	function renderStudent() {
@@ -208,7 +223,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 			.map(
 				(book, index) => `
 				<tr>
-					<td>${escapeHtml(book.accession_number || "")}</td>
+					<td><a href="/app/library-books/${encodeURIComponent(book.name)}" target="_blank">${escapeHtml(book.accession_number || "")}</a></td>
 					<td>${escapeHtml(book.book_name || "")}</td>
 					<td>${escapeHtml(book.author || "")}</td>
 					<td>${escapeHtml(book.publisher || "")}</td>
@@ -248,6 +263,10 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 			dialog.hide();
 		});
 		dialog.show();
+		setTimeout(() => {
+			const el = dialog.fields_dict.matches_html.$wrapper.find(".table-responsive")[0];
+			if (el) el.scrollLeft = 0;
+		}, 100);
 	}
 
 	function addIssueBook(book) {
@@ -270,7 +289,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 				.map(
 					(book, index) => `
 					<tr>
-						<td>${escapeHtml(book.accession_number || "")}</td>
+						<td>${book.name ? `<a href="/app/library-books/${encodeURIComponent(book.name)}" target="_blank">${escapeHtml(book.accession_number || "")}</a>` : escapeHtml(book.accession_number || "")}</td>
 						<td>${escapeHtml(book.isbn || "")}</td>
 						<td>${escapeHtml(book.book_name || "")}</td>
 						<td>${escapeHtml(book.author || "")}</td>
@@ -319,7 +338,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 					<label class="return-card">
 						<div>
 							<div class="book-title">${escapeHtml(book.book_name || "")}</div>
-							<div class="muted">${escapeHtml(book.accession_number || "")} · ${__("Due")}: ${escapeHtml(book.due_date || "-")}</div>
+							<div class="muted"><a href="/app/library-books/${encodeURIComponent(book.library_book)}" target="_blank">${escapeHtml(book.accession_number || "")}</a> · ${__("Due")}: ${escapeHtml(book.due_date || "-")}</div>
 						</div>
 						<input type="checkbox" class="return-check" value="${escapeHtml(book.library_book)}">
 					</label>

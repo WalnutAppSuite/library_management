@@ -200,6 +200,18 @@ frappe.pages["library-book-intake"].on_page_load = function (wrapper) {
 			frappe.msgprint(__("Add at least one book."));
 			return;
 		}
+		
+		// Validate that each book has either accession_number or isbn
+		const booksWithoutIdentifiers = rows.filter((row) => !row.accession_number && !row.isbn);
+		if (booksWithoutIdentifiers.length > 0) {
+			frappe.msgprint(
+				__("The following books do not have an accession number or ISBN number. At least one is required for QR generation:") + 
+				"<br>" + 
+				booksWithoutIdentifiers.map((row) => row.book_name || row.isbn || __("Unnamed Book")).join("<br>")
+			);
+			return;
+		}
+		
 		const r = await frappe.call({
 			method: "library_management.services.save_library_books",
 			args: { rows, branch: state.branch, room: state.room, book_shelf: state.book_shelf },
@@ -218,15 +230,49 @@ frappe.pages["library-book-intake"].on_page_load = function (wrapper) {
 			frappe.msgprint(__("Select saved books to print QR labels."));
 			return;
 		}
-		const r = await frappe.call({
-			method: "library_management.services.print_book_qr_labels",
-			args: { book_names: bookNames },
-			freeze: true,
-			freeze_message: __("Preparing QR labels..."),
-		});
-		if (r.message) {
-			const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
-			window.open(URL.createObjectURL(blob), "_blank");
+
+		const selectedRows = state.rows.filter((row) => row.name && state.selected.has(row.name));
+		const validBooks = selectedRows.filter((row) => row.accession_number).map((row) => row.name);
+		const skippedBooks = selectedRows
+			.filter((row) => !row.accession_number)
+			.map((row) => {
+				const label = escapeHtml(row.book_name || row.isbn || row.name);
+				return row.name
+					? `<a href="/app/library-books/${encodeURIComponent(row.name)}" target="_blank">${label}</a>`
+					: label;
+			});
+
+		if (!validBooks.length) {
+			frappe.msgprint(__("No selected books have an accession number. Please assign accession numbers before printing."));
+			return;
+		}
+
+		if (skippedBooks.length) {
+			frappe.msgprint({
+				title: __("Skipping those books which do not have accession number"),
+				message: __("Please set accession number to them:") + "<br>" + skippedBooks.join("<br>"),
+				indicator: "orange",
+			});
+		}
+
+		try {
+			const r = await frappe.call({
+				method: "library_management.services.print_book_qr_labels",
+				args: { book_names: validBooks },
+				freeze: true,
+				freeze_message: __("Preparing QR labels..."),
+			});
+			if (r.message) {
+				const blob = new Blob([r.message], { type: "text/html; charset=utf-8" });
+				const url = URL.createObjectURL(blob);
+				window.open(url, "_blank", "width=900,height=1000,menubar=yes,toolbar=yes");
+			}
+		} catch (error) {
+			frappe.msgprint({
+				title: __("QR Generation Error"),
+				message: error.responseText || __("Unable to generate QR codes. Please ensure all selected books have an accession number."),
+				indicator: "red"
+			});
 		}
 	}
 
