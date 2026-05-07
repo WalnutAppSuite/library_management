@@ -64,7 +64,7 @@ role_home_page = {
 
 scheduler_events = {
 	"daily": [
-		"library_management.tasks.daily"
+		"library_management.services.update_all_due_days"
 	],
 }
 
@@ -90,4 +90,3 @@ scheduler_events = {
 # -------
 
 # before_tests = "library_management.install.before_tests"
-

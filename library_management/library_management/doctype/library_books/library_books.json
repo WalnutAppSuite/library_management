@@ -13,6 +13,8 @@
   "author",
   "status",
   "branch",
+  "room",
+  "book_shelf",
   "column_break_pxyi",
   "pages",
   "publisher",
@@ -28,7 +30,12 @@
   "edition",
   "year_of_publication",
   "remarks",
-  "take_home"
+  "take_home",
+  "qr_section",
+  "qr_code_payload",
+  "qr_code_image",
+  "extraction_source",
+  "extraction_confidence"
  ],
  "fields": [
   {
@@ -71,6 +78,17 @@
    "label": "Branch",
    "options": "School",
    "reqd": 1
+  },
+  {
+   "fieldname": "room",
+   "fieldtype": "Link",
+   "label": "Room",
+   "options": "Room"
+  },
+  {
+   "fieldname": "book_shelf",
+   "fieldtype": "Data",
+   "label": "Book Shelf"
   },
   {
    "fieldname": "column_break_pxyi",
@@ -154,13 +172,43 @@
    "fieldtype": "Check",
    "label": "Take Home",
    "reqd": 1
+  },
+  {
+   "fieldname": "qr_section",
+   "fieldtype": "Section Break",
+   "label": "QR & Extraction"
+  },
+  {
+   "fieldname": "qr_code_payload",
+   "fieldtype": "Long Text",
+   "label": "QR Code Payload",
+   "read_only": 1
+  },
+  {
+   "fieldname": "qr_code_image",
+   "fieldtype": "Code",
+   "label": "QR Code Image",
+   "options": "HTML",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extraction_source",
+   "fieldtype": "Data",
+   "label": "Extraction Source",
+   "read_only": 1
+  },
+  {
+   "fieldname": "extraction_confidence",
+   "fieldtype": "Percent",
+   "label": "Extraction Confidence",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-24 16:43:54.038751",
+ "modified": "2026-04-30 07:03:57.342321",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Books",

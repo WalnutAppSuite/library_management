@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-29 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "library_book",
+  "isbn",
+  "accession_number",
+  "book_name",
+  "author",
+  "publisher",
+  "column_break_dates",
+  "issue_date",
+  "due_date",
+  "return_date",
+  "book_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "library_book",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Library Book",
+   "options": "Library Books",
+   "reqd": 1
+  },
+  {
+   "fieldname": "isbn",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ISBN"
+  },
+  {
+   "fieldname": "accession_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Accession Number"
+  },
+  {
+   "fieldname": "book_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Book Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "author",
+   "fieldtype": "Data",
+   "label": "Author"
+  },
+  {
+   "fieldname": "publisher",
+   "fieldtype": "Data",
+   "label": "Publisher"
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Issue Date"
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Due Date"
+  },
+  {
+   "fieldname": "return_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Return Date"
+  },
+  {
+   "default": "READING",
+   "fieldname": "book_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Book Status",
+   "options": "READING\nRETURNED",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-30 07:03:57.342321",
+ "modified_by": "Administrator",
+ "module": "Library Management",
+ "name": "Library Transaction Book",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
