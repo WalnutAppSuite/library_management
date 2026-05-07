@@ -58,14 +58,41 @@ frappe.ui.form.on("Library Books", {
 });
 
 function render_qr(frm) {
+	if (!document.getElementById("library-book-qr-preview-css")) {
+		const style = document.createElement("style");
+		style.id = "library-book-qr-preview-css";
+		style.textContent = `
+			[data-fieldname="qr_code_image"] .control-value,
+			[data-fieldname="qr_code_image"] .ace-editor-target,
+			[data-fieldname="qr_code_image"] > .icon-btn { display: none !important; }
+			.library-book-qr-preview img { width: 140px !important; height: 140px !important; display: block; }
+		`;
+		document.head.appendChild(style);
+	}
 	const field = frm.fields_dict.qr_code_image;
 	if (!field || !field.$wrapper || !frm.doc.qr_code_image) {
 		return;
 	}
 	const value = String(frm.doc.qr_code_image || "");
-	let html = value;
+	let src = "";
 	if (value.startsWith("data:image/")) {
-		html = `<img src="${frappe.utils.escape_html(value)}" alt="${frappe.utils.escape_html(frm.doc.book_name || frm.doc.name)}" style="width:160px;height:160px;">`;
+		src = value;
+	} else {
+		const match = value.match(/<img[^>]+src=["']([^"']+)["']/i);
+		if (match) {
+			src = match[1];
+		}
 	}
-	field.$wrapper.find(".control-value").html(`<div class="library-book-qr-preview">${html}</div>`);
+	if (!src) {
+		return;
+	}
+	const alt = frappe.utils.escape_html(frm.doc.book_name || frm.doc.name);
+	const img = `<img src="${frappe.utils.escape_html(src)}" alt="${alt}">`;
+	const $wrapper = field.$wrapper;
+	let $preview = $wrapper.find(".library-book-qr-preview");
+	if (!$preview.length) {
+		$preview = $(`<div class="library-book-qr-preview" style="margin-top:6px;"></div>`);
+		$wrapper.append($preview);
+	}
+	$preview.html(img);
 }
