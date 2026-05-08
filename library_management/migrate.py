@@ -23,7 +23,10 @@ def after_migrate():
                     "label": "Library Books",
                     "fieldtype": "Table",
                     "options": "Library Books Student Table",
-                    "is_virtual": 1,
+                    # See library_revamp_uat_fix.ensure_student_custom_field_is_virtual:
+                    # Frappe v15 rejects fieldtype=Table + is_virtual=1 at insert.
+                    # Create with 0 then flip via direct DB update below.
+                    "is_virtual": 0,
                     "no_copy": 1,
                     "print_hide": 1,
                     "insert_after": "custom_number_of_books_issued",
@@ -32,4 +35,12 @@ def after_migrate():
         },
         update=True,
     )
+
+    cf_name = frappe.db.exists(
+        "Custom Field",
+        {"dt": "Student", "fieldname": "custom_library_books"},
+    )
+    if cf_name and frappe.db.get_value("Custom Field", cf_name, "is_virtual") != 1:
+        frappe.db.set_value("Custom Field", cf_name, "is_virtual", 1, update_modified=False)
+
     frappe.clear_cache(doctype="Student")

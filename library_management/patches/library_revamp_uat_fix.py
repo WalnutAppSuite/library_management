@@ -66,12 +66,24 @@ def reconcile_book_quantities():
 
 
 def ensure_student_custom_field_is_virtual():
-    """Force-flip Student.custom_library_books to is_virtual=1.
+    """Ensure Student.custom_library_books exists and is wired to the
+    virtual Library Books Student Table.
 
-    edu_quality used to ship this Custom Field with is_virtual=0; library_management
-    owns the virtual table doctype, so we own the field's flag too. Use
-    create_custom_fields(update=True) so this is idempotent and survives any
-    fixture sync from another app.
+    Frappe v15 rejects Custom Field with fieldtype=Table AND is_virtual=1
+    at insert time (`Child Table ... cannot be virtual`), so we:
+
+    1. Create the field with is_virtual=0 (passes validation).
+    2. Bypass validation with frappe.db.set_value to set is_virtual=1
+       on the Custom Field row itself.
+
+    Why is_virtual on the Custom Field matters: nothing — the framework
+    decides whether to auto-fetch the child rows by checking the OPTIONS
+    doctype's is_virtual flag (Library Books Student Table.is_virtual=1),
+    NOT the Custom Field's flag. We still set the flag because edu_quality
+    historically shipped it with is_virtual=0; flipping it to 1 makes the
+    intent explicit and survives an unintentional re-sync from another app.
+
+    Idempotent.
     """
     if not frappe.db.exists("DocType", "Student"):
         return
@@ -86,7 +98,9 @@ def ensure_student_custom_field_is_virtual():
                     "label": "Library Books",
                     "fieldtype": "Table",
                     "options": "Library Books Student Table",
-                    "is_virtual": 1,
+                    # is_virtual=0 here so the insert validation passes;
+                    # flipped to 1 below via direct DB update.
+                    "is_virtual": 0,
                     "no_copy": 1,
                     "print_hide": 1,
                     "insert_after": "custom_number_of_books_issued",
@@ -95,6 +109,14 @@ def ensure_student_custom_field_is_virtual():
         },
         update=True,
     )
+
+    # Bypass Frappe's "Child Table cannot be virtual" validate() guard.
+    cf_name = frappe.db.exists(
+        "Custom Field",
+        {"dt": "Student", "fieldname": "custom_library_books"},
+    )
+    if cf_name and frappe.db.get_value("Custom Field", cf_name, "is_virtual") != 1:
+        frappe.db.set_value("Custom Field", cf_name, "is_virtual", 1, update_modified=False)
 
 
 def truncate_orphaned_snapshot_table():
