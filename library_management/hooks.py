@@ -11,6 +11,15 @@ app_version = "0.0.1"
 after_install = "library_management.setup.install.after_install"
 after_migrate = "library_management.migrate.after_migrate"
 
+# Populate the virtual `custom_library_books` child table when a Student
+# is loaded. Frappe v15 doesn't auto-fetch virtual child tables, so we
+# fill it in on the onload event (fires when the form opens for editing).
+doc_events = {
+	"Student": {
+		"onload": "library_management.services.populate_student_library_books_table",
+	},
+}
+
 # Includes in <head>
 # ------------------
 

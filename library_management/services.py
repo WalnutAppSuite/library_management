@@ -1071,3 +1071,26 @@ def update_all_due_days():
 	)
 	for row in students:
 		_update_student_book_count(row.student)
+
+
+def populate_student_library_books_table(doc, method=None):
+	"""onload hook for Student — populate the virtual `custom_library_books`
+	child table by joining Library Transaction Book ↔ Library Transactions
+	filtered by student. Frappe v15 doesn't auto-fetch virtual child tables
+	on parent load, so the field arrives empty unless we fill it here."""
+	if not getattr(doc, "name", None) or doc.is_new():
+		return
+	if not doc.meta.get_field("custom_library_books"):
+		return
+	if not _has_doctype("Library Books Student Table") or not _has_doctype("Library Transaction Book"):
+		return
+	from library_management.library_management.doctype.library_books_student_table.library_books_student_table import rows_for_student
+	rows = rows_for_student(doc.name) or []
+	doc.set("custom_library_books", rows)
+
+
+def _has_doctype(name):
+	try:
+		return bool(frappe.db.exists("DocType", name))
+	except Exception:
+		return False

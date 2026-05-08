@@ -6,6 +6,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "library_transaction",
   "book_id",
   "book_name",
   "author",
@@ -18,10 +19,16 @@
   "book_status",
   "due__days",
   "take_home",
-  "library_transaction",
   "library_transaction_book"
  ],
  "fields": [
+  {
+   "fieldname": "library_transaction",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Transaction",
+   "options": "Library Transactions"
+  },
   {
    "fieldname": "book_id",
    "fieldtype": "Data",
@@ -93,13 +100,6 @@
    "label": "Take Home"
   },
   {
-   "fieldname": "library_transaction",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Transaction",
-   "options": "Library Transactions"
-  },
-  {
    "fieldname": "library_transaction_book",
    "fieldtype": "Data",
    "hidden": 1,
@@ -111,7 +111,7 @@
  "is_virtual": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-05-08 00:00:00.000000",
+ "modified": "2026-05-08 11:00:00.000000",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Books Student Table",
