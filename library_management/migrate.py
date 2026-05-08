@@ -15,6 +15,15 @@ def after_migrate():
     if not frappe.db.exists("DocType", "Library Books Student Table"):
         return
 
+    # Frappe v15 enforces parent_doctype.is_virtual == child.is_virtual on
+    # Table fields. Student is regular (0), so the child doctype must also
+    # be 0. Flip back if anyone re-stomped is_virtual to 1.
+    if frappe.db.get_value("DocType", "Library Books Student Table", "is_virtual") == 1:
+        frappe.db.set_value(
+            "DocType", "Library Books Student Table", "is_virtual", 0,
+            update_modified=False,
+        )
+
     create_custom_fields(
         {
             "Student": [
@@ -23,9 +32,6 @@ def after_migrate():
                     "label": "Library Books",
                     "fieldtype": "Table",
                     "options": "Library Books Student Table",
-                    # See library_revamp_uat_fix.ensure_student_custom_field_is_virtual:
-                    # Frappe v15 rejects fieldtype=Table + is_virtual=1 at insert.
-                    # Create with 0 then flip via direct DB update below.
                     "is_virtual": 0,
                     "no_copy": 1,
                     "print_hide": 1,
@@ -40,7 +46,10 @@ def after_migrate():
         "Custom Field",
         {"dt": "Student", "fieldname": "custom_library_books"},
     )
-    if cf_name and frappe.db.get_value("Custom Field", cf_name, "is_virtual") != 1:
-        frappe.db.set_value("Custom Field", cf_name, "is_virtual", 1, update_modified=False)
+    if cf_name and frappe.db.get_value("Custom Field", cf_name, "is_virtual") != 0:
+        frappe.db.set_value(
+            "Custom Field", cf_name, "is_virtual", 0,
+            update_modified=False,
+        )
 
     frappe.clear_cache(doctype="Student")
