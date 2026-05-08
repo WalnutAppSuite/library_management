@@ -1,7 +1,7 @@
-frappe.pages["library-book-intake"].on_page_load = function (wrapper) {
+frappe.pages["add-library-books"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Library Book Intake"),
+		title: __("Add Library Books"),
 		single_column: true,
 	});
 
