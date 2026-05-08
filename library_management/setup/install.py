@@ -12,8 +12,10 @@ def after_install():
     from library_management.patches import (
         library_revamp_uat_fix,
         drop_legacy_doctypes,
+        rename_library_book_intake_page,
     )
 
     library_revamp_uat_fix.execute()
     drop_legacy_doctypes.execute()
+    rename_library_book_intake_page.execute()
     frappe.db.commit()

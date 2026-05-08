@@ -7,9 +7,9 @@
  "modified": "2026-05-08 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Library Management",
- "name": "library-book-intake",
+ "name": "add-library-books",
  "owner": "Administrator",
- "page_name": "library-book-intake",
+ "page_name": "add-library-books",
  "roles": [
   {
    "role": "System Manager"
@@ -25,5 +25,5 @@
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Library Book Intake"
+ "title": "Add Library Books"
 }
