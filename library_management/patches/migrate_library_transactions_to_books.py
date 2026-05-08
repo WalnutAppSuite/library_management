@@ -6,6 +6,8 @@ def execute():
 	if not frappe.db.exists("DocType", "Library Transaction Book"):
 		return
 
+	skipped = []
+	migrated = 0
 	for txn in frappe.get_all(
 		"Library Transactions",
 		fields=[
@@ -24,6 +26,7 @@ def execute():
 			continue
 
 		if not (txn.isbn or txn.accession_number or txn.book_name):
+			skipped.append((txn.name, "no isbn/accession/book_name on txn"))
 			continue
 
 		book_name = None
@@ -33,6 +36,7 @@ def execute():
 			book_name = frappe.db.get_value("Library Books", {"isbn": txn.isbn}, "name")
 
 		if not book_name:
+			skipped.append((txn.name, f"no Library Books match (acc={txn.accession_number}, isbn={txn.isbn})"))
 			continue
 
 		book = frappe.db.get_value(
@@ -61,3 +65,17 @@ def execute():
 				"book_status": status,
 			}
 		).insert(ignore_permissions=True)
+		migrated += 1
+
+	if skipped:
+		body = "Library Transactions that could NOT be migrated to child rows:\n\n"
+		body += "\n".join(f"  - {name}: {reason}" for name, reason in skipped[:200])
+		if len(skipped) > 200:
+			body += f"\n\n...and {len(skipped) - 200} more."
+		frappe.log_error(
+			title="Library txn migration: skipped transactions",
+			message=body,
+		)
+	frappe.logger("library_management").info(
+		f"migrate_library_transactions_to_books: migrated={migrated}, skipped={len(skipped)}"
+	)

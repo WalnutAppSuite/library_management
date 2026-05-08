@@ -1,1 +1,3 @@
 library_management.patches.migrate_library_transactions_to_books
+library_management.patches.library_revamp_uat_fix
+library_management.patches.drop_legacy_doctypes

@@ -8,9 +8,8 @@ app_email = "info@frappe.io"
 app_url = "https://frappe.io/apps/library_management"
 app_version = "0.0.1"
 
-role_home_page = {
-	"Library Member": "article"
-}
+after_install = "library_management.setup.install.after_install"
+after_migrate = "library_management.migrate.after_migrate"
 
 # Includes in <head>
 # ------------------

@@ -33,8 +33,7 @@
    "fieldname": "book_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Book Name",
-   "options": "Article"
+   "label": "Book Name"
   },
   {
    "fieldname": "author",
@@ -112,7 +111,7 @@
  "is_virtual": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-05-07 12:35:28.891918",
+ "modified": "2026-05-08 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Books Student Table",
