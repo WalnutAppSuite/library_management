@@ -42,26 +42,49 @@ def drop_legacy_avail_quantity_column():
 
 
 def reconcile_book_quantities():
-    """NULL/0 quantity/available_quantity → sane defaults.
+    """NULL / 0 / non-numeric quantity & available_quantity → sane defaults.
 
-    Per the agreed policy:
-      - quantity NULL or 0 → 1
-      - available_quantity NULL or 0 → quantity (after the line above runs)
-    Books actively borrowed will have available_quantity reduced by the issue
-    flow when needed; this only fixes the "broken/uninitialized" state.
+    Pre-sync patch — runs before Frappe's `ALTER ... MODIFY ... int(11)` on
+    these columns. On legacy prod sites the columns are still varchar and
+    may hold non-numeric strings like 'NA'. We filter with REGEXP / IS NULL
+    only — never `col = 0` — so MariaDB doesn't implicit-cast varchar →
+    numeric (which 1292-errors under strict mode). After this runs, every
+    row holds either NULL or a positive-integer string, so the subsequent
+    schema ALTER to int(11) succeeds.
+
+    Policy (unchanged):
+      - quantity NULL / 0 / non-numeric → 1
+      - available_quantity NULL / 0 / non-numeric → quantity
+    Books actively borrowed will have available_quantity reduced by the
+    issue flow when needed; this only fixes the broken/uninitialized state.
     """
     if not frappe.db.table_exists("Library Books"):
         return
 
-    fixed_quantity = frappe.db.sql(
-        "UPDATE `tabLibrary Books` SET quantity=1 WHERE quantity IS NULL OR quantity=0"
-    )
-    fixed_available = frappe.db.sql(
-        "UPDATE `tabLibrary Books` SET available_quantity=quantity "
-        "WHERE available_quantity IS NULL OR available_quantity=0"
-    )
+    cols = [r[0] for r in frappe.db.sql("SHOW COLUMNS FROM `tabLibrary Books`")]
+
+    if "quantity" in cols:
+        frappe.db.sql(
+            """
+            UPDATE `tabLibrary Books`
+            SET quantity = 1
+            WHERE quantity IS NULL
+               OR CAST(quantity AS CHAR) NOT REGEXP '^[1-9][0-9]*$'
+            """
+        )
+
+    if "available_quantity" in cols:
+        frappe.db.sql(
+            """
+            UPDATE `tabLibrary Books`
+            SET available_quantity = quantity
+            WHERE available_quantity IS NULL
+               OR CAST(available_quantity AS CHAR) NOT REGEXP '^[1-9][0-9]*$'
+            """
+        )
+
     frappe.logger("library_management").info(
-        "library_revamp_uat_fix: quantity reset on rows; available_quantity reconciled"
+        "library_revamp_uat_fix: quantity / available_quantity sanitized"
     )
 
 
