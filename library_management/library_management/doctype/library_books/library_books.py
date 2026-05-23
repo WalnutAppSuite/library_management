@@ -10,7 +10,8 @@ from frappe.utils import cint, get_link_to_form
 class LibraryBooks(Document):
 	def validate(self):
 		self.quantity = cint(self.quantity) or 1
-		self.available_quantity = cint(self.available_quantity) or self.quantity
+		if self.available_quantity is None:
+			self.available_quantity = self.quantity
 		if self.accession_number and self.branch:
 			existing = frappe.get_value(
 				"Library Books",
