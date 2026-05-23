@@ -1,4 +1,8 @@
-library_management.patches.migrate_library_transactions_to_books
+[pre_model_sync]
+library_management.patches.heal_library_books_quantity_strings
 library_management.patches.library_revamp_uat_fix
+
+[post_model_sync]
+library_management.patches.migrate_library_transactions_to_books
 library_management.patches.drop_legacy_doctypes
 library_management.patches.rename_library_book_intake_page
