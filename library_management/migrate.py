@@ -10,6 +10,15 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
 def after_migrate():
+    try:
+        _run_after_migrate()
+    except Exception:
+        frappe.db.rollback()
+        _run_after_migrate()
+        frappe.db.commit()
+
+
+def _run_after_migrate():
     if not frappe.db.exists("DocType", "Student"):
         return
     if not frappe.db.exists("DocType", "Library Books Student Table"):
