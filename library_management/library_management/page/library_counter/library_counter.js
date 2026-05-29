@@ -9,6 +9,39 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		btn_class: "btn-primary",
 		icon: "add",
 	});
+	page.add_button(__("Reports"), showReports, { btn_class: "btn-default", icon: "list" });
+
+	const LIBRARY_REPORTS = [
+		["Book Issue Register", __("Book Issue Register"), __("Every book issued / returned, with dates and status")],
+		["Overdue Books", __("Overdue Books"), __("Books past their due date, by student and branch")],
+		["Most Issued Books", __("Most Issued Books"), __("Ranking of titles by number of times issued")],
+		["Library Stock Summary", __("Library Stock Summary"), __("Quantity, available and issued copies per book")],
+		["Unavailable Books", __("Unavailable Books"), __("Books with no copies available or marked inactive")],
+	];
+
+	function showReports() {
+		const dialog = new frappe.ui.Dialog({
+			title: __("Library Reports"),
+			fields: [{ fieldtype: "HTML", fieldname: "links" }],
+		});
+		const html =
+			`<div class="library-report-links">` +
+			LIBRARY_REPORTS.map(
+				([name, label, hint]) => `
+				<button class="btn btn-report" data-report="${escapeHtml(name)}">
+					<span class="report-label">${escapeHtml(label)}</span>
+					<span class="report-hint">${escapeHtml(hint)}</span>
+				</button>
+			`
+			).join("") +
+			`</div>`;
+		dialog.fields_dict.links.$wrapper.html(html);
+		dialog.fields_dict.links.$wrapper.find(".btn-report").on("click", function () {
+			frappe.set_route("query-report", this.dataset.report);
+			dialog.hide();
+		});
+		dialog.show();
+	}
 
 	const state = {
 		branch: "",
