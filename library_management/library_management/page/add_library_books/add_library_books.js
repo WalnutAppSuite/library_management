@@ -5,6 +5,11 @@ frappe.pages["add-library-books"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
+	page.add_button(__("Library Counter"), () => frappe.set_route("library-counter"), {
+		btn_class: "btn-primary",
+		icon: "arrow-right",
+	});
+
 	const state = {
 		branch: "",
 		room: "",
@@ -38,12 +43,12 @@ frappe.pages["add-library-books"].on_page_load = function (wrapper) {
 							<tr>
 								<th class="select-col"><input type="checkbox" id="select-all-books"></th>
 								<th>${__("ISBN")}</th>
-								<th>${__("Title")}</th>
-								<th>${__("Author")}</th>
-								<th>${__("Publisher")}</th>
+								<th>${__("Title")} <span class="reqd-star">*</span></th>
+								<th>${__("Author")} <span class="reqd-star">*</span></th>
+								<th>${__("Publisher")} <span class="reqd-star">*</span></th>
 								<th>${__("Pages")}</th>
 								<th>${__("Price")}</th>
-								<th>${__("Accession No.")}</th>
+								<th>${__("Accession No.")} <span class="reqd-star">*</span></th>
 								<th>${__("QR")}</th>
 								<th></th>
 							</tr>
@@ -201,17 +206,33 @@ frappe.pages["add-library-books"].on_page_load = function (wrapper) {
 			return;
 		}
 		
-		// Validate that each book has either accession_number or isbn
-		const booksWithoutIdentifiers = rows.filter((row) => !row.accession_number && !row.isbn);
-		if (booksWithoutIdentifiers.length > 0) {
-			frappe.msgprint(
-				__("The following books do not have an accession number or ISBN number. At least one is required for QR generation:") + 
-				"<br>" + 
-				booksWithoutIdentifiers.map((row) => row.book_name || row.isbn || __("Unnamed Book")).join("<br>")
-			);
+		// Title, Author, Publisher and Accession No. are mandatory for every book.
+		const requiredFields = [
+			["book_name", __("Title")],
+			["author", __("Author")],
+			["publisher", __("Publisher")],
+			["accession_number", __("Accession No.")],
+		];
+		const invalid = rows
+			.map((row) => ({
+				row,
+				missing: requiredFields.filter(([field]) => !String(row[field] || "").trim()).map(([, label]) => label),
+			}))
+			.filter((entry) => entry.missing.length);
+		if (invalid.length) {
+			frappe.msgprint({
+				title: __("Missing required fields"),
+				indicator: "red",
+				message:
+					__("Title, Author, Publisher and Accession No. are required for every book. Please complete:") +
+					"<br>" +
+					invalid
+						.map((entry) => `${escapeHtml(entry.row.book_name || entry.row.isbn || __("Unnamed Book"))} — ${entry.missing.join(", ")}`)
+						.join("<br>"),
+			});
 			return;
 		}
-		
+
 		const r = await frappe.call({
 			method: "library_management.services.save_library_books",
 			args: { rows, branch: state.branch, room: state.room, book_shelf: state.book_shelf },

@@ -5,6 +5,11 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 
+	page.add_button(__("Add Books"), () => frappe.set_route("add-library-books"), {
+		btn_class: "btn-primary",
+		icon: "add",
+	});
+
 	const state = {
 		branch: "",
 		student: null,
@@ -61,10 +66,12 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 					<div class="section-title">${__("Active Issued Books")}</div>
 					<div id="return-list"></div>
 					<div class="actions">
+						<button class="btn btn-reissue" id="submit-reissue">${__("Reissue Selected")}</button>
 						<button class="btn btn-return" id="submit-return">${__("Return Selected")}</button>
 					</div>
 				</div>
 			</div>
+			<div class="panel" id="student-history"></div>
 		</div>
 	`);
 
@@ -109,6 +116,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 	page.main.find("#add-book").on("click", () => findBook(bookForm.get_value("book_identifier")));
 	page.main.find("#submit-issue").on("click", submitIssue);
 	page.main.find("#submit-return").on("click", submitReturn);
+	page.main.find("#submit-reissue").on("click", submitReissue);
 	page.main.on("click", ".remove-issue", function () {
 		state.issueBooks.splice(Number(this.dataset.index), 1);
 		renderIssueBooks();
@@ -176,6 +184,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		const s = state.student;
 		if (!s) {
 			page.main.find("#student-card").empty();
+			renderHistory();
 			return;
 		}
 		const image = s.image || "/assets/frappe/images/default-avatar.png";
@@ -192,6 +201,54 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 					</div>
 				</div>
 			</div>
+		`);
+		renderHistory();
+	}
+
+	function renderHistory() {
+		const rows = (state.student && state.student.history) || [];
+		if (!state.student) {
+			page.main.find("#student-history").empty();
+			return;
+		}
+		const body = rows
+			.map((row) => {
+				const returned = row.book_status === "RETURNED";
+				const overdue = !returned && row.due__days && row.due__days !== "0 days";
+				return `
+					<tr class="${returned ? "" : "is-reading"}">
+						<td>${escapeHtml(row.book_name || "")}</td>
+						<td>${escapeHtml(row.author || "")}</td>
+						<td>${escapeHtml(row.reference_number || "")}</td>
+						<td>${escapeHtml(row.book_issue_date || "-")}</td>
+						<td>${escapeHtml(returned ? row.book_return_date || "-" : "-")}</td>
+						<td><span class="chip ${returned ? "neutral" : ""}">${escapeHtml(row.book_status || "")}</span></td>
+						<td>${escapeHtml(String(row.reissue_count || 0))}</td>
+						<td>${overdue ? `<span class="chip warn">${escapeHtml(row.due__days)}</span>` : "-"}</td>
+					</tr>
+				`;
+			})
+			.join("");
+		page.main.find("#student-history").html(`
+			<div class="section-title">${__("Issue / Return History")}</div>
+			<div class="table-responsive">
+				<table class="table counter-table">
+					<thead>
+						<tr>
+							<th>${__("Title")}</th>
+							<th>${__("Author")}</th>
+							<th>${__("Accession")}</th>
+							<th>${__("Issued")}</th>
+							<th>${__("Returned")}</th>
+							<th>${__("Status")}</th>
+							<th>${__("Reissued")}</th>
+							<th>${__("Overdue")}</th>
+						</tr>
+					</thead>
+					<tbody>${body}</tbody>
+				</table>
+			</div>
+			${rows.length ? "" : `<div class="empty-note">${__("No history yet.")}</div>`}
 		`);
 	}
 
@@ -333,19 +390,38 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 		const books = (state.student && state.student.active_books) || [];
 		page.main.find("#return-list").html(
 			books
-				.map(
-					(book) => `
+				.map((book) => {
+					const acc = escapeHtml(book.accession_number || "");
+					const accCell = book.library_book
+						? `<a href="/app/library-books/${encodeURIComponent(book.library_book)}" target="_blank">${acc}</a>`
+						: acc;
+					return `
 					<label class="return-card">
 						<div>
 							<div class="book-title">${escapeHtml(book.book_name || "")}</div>
-							<div class="muted"><a href="/app/library-books/${encodeURIComponent(book.library_book)}" target="_blank">${escapeHtml(book.accession_number || "")}</a> · ${__("Due")}: ${escapeHtml(book.due_date || "-")}</div>
+							<div class="muted">${accCell} · ${__("Due")}: ${escapeHtml(book.due_date || "-")}</div>
 						</div>
-						<input type="checkbox" class="return-check" value="${escapeHtml(book.library_book)}">
+						<input type="checkbox" class="return-check"
+							value="${escapeHtml(book.name || "")}"
+							data-library_book="${escapeHtml(book.library_book || "")}"
+							data-accession="${acc}">
 					</label>
-				`
-				)
+				`;
+				})
 				.join("") || `<div class="empty-note">${__("No active issued books.")}</div>`
 		);
+	}
+
+	function collectSelectedReturns() {
+		const books = [];
+		page.main.find(".return-check:checked").each(function () {
+			books.push({
+				txn_book: this.value,
+				library_book: this.dataset.library_book || undefined,
+				accession_number: this.dataset.accession || undefined,
+			});
+		});
+		return books;
 	}
 
 	async function submitReturn() {
@@ -353,10 +429,7 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 			frappe.msgprint(__("Fetch a student first."));
 			return;
 		}
-		const books = [];
-		page.main.find(".return-check:checked").each(function () {
-			books.push({ library_book: this.value });
-		});
+		const books = collectSelectedReturns();
 		if (!books.length) {
 			frappe.msgprint(__("Select at least one book to return."));
 			return;
@@ -368,6 +441,26 @@ frappe.pages["library-counter"].on_page_load = function (wrapper) {
 			freeze_message: __("Returning books"),
 		});
 		frappe.show_alert({ message: __("Books returned"), indicator: "green" });
+		await fetchStudent(state.student.name);
+	}
+
+	async function submitReissue() {
+		if (!state.student) {
+			frappe.msgprint(__("Fetch a student first."));
+			return;
+		}
+		const books = collectSelectedReturns();
+		if (!books.length) {
+			frappe.msgprint(__("Select at least one book to reissue."));
+			return;
+		}
+		await frappe.call({
+			method: "library_management.services.reissue_books",
+			args: { student: state.student.name, books },
+			freeze: true,
+			freeze_message: __("Reissuing books"),
+		});
+		frappe.show_alert({ message: __("Books reissued"), indicator: "green" });
 		await fetchStudent(state.student.name);
 	}
 

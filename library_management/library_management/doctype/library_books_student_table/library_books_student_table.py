@@ -61,6 +61,7 @@ def rows_for_student(student):
 				ELSE ''
 			END                  AS reading_period,
 			ltb.book_status,
+			IFNULL(ltb.reissue_count, 0) AS reissue_count,
 			CASE
 				WHEN ltb.book_status = 'READING'
 				     AND ltb.due_date IS NOT NULL

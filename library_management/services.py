@@ -523,6 +523,19 @@ def save_library_books(rows, branch, room=None, book_shelf=None):
 	if not rows:
 		frappe.throw(_("Add at least one book"))
 
+	# Title, Author, Publisher and Accession Number are mandatory for every book.
+	required = [("book_name", _("Title")), ("author", _("Author")), ("publisher", _("Publisher")), ("accession_number", _("Accession Number"))]
+	problems = []
+	for raw in rows:
+		raw = _as_dict(raw)
+		if not (raw.get("isbn") or raw.get("book_name") or raw.get("author") or raw.get("publisher") or raw.get("name")):
+			continue
+		missing = [label for field, label in required if not cstr(raw.get(field)).strip()]
+		if missing:
+			problems.append("{0}: {1}".format(raw.get("book_name") or raw.get("isbn") or _("Unnamed Book"), ", ".join(missing)))
+	if problems:
+		frappe.throw(_("Title, Author, Publisher and Accession Number are required for every book.") + "<br>" + "<br>".join(problems))
+
 	saved = []
 	next_accession = cint(get_next_accession_number(branch))
 	for raw in rows:
@@ -896,6 +909,14 @@ def resolve_student(identifier, branch=None):
 	)
 	student["issued_count"] = len(student["active_books"])
 	student["overdue_count"] = len([row for row in student["active_books"] if row.due_date and getdate(row.due_date) < getdate(today())])
+
+	# Full issue/return history for the Library Counter, reusing the same
+	# join used to populate the Student form's custom_library_books table.
+	from library_management.library_management.doctype.library_books_student_table.library_books_student_table import (
+		rows_for_student,
+	)
+
+	student["history"] = rows_for_student(student.name)
 	return student
 
 
@@ -1021,29 +1042,63 @@ def create_issue_transaction(student, books, branch=None):
 	return tx.as_dict()
 
 
+def _active_issue_rows(student=None):
+	"""READING transaction-book rows, optionally scoped to one student.
+
+	Scoping by student in SQL keeps the result bounded (the old global scan
+	capped at 500 rows could silently miss a student's books)."""
+	conditions = ["ltb.book_status = 'READING'", "ltb.parenttype = 'Library Transactions'"]
+	values = {}
+	if student:
+		conditions.append("lt.student = %(student)s")
+		values["student"] = student
+	where = " AND ".join(conditions)
+	return frappe.db.sql(
+		f"""
+		SELECT ltb.name, ltb.parent, lt.student, ltb.library_book,
+		       ltb.isbn, ltb.accession_number, ltb.reissue_count
+		FROM `tabLibrary Transaction Book` ltb
+		JOIN `tabLibrary Transactions` lt ON lt.name = ltb.parent
+		WHERE {where}
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+def _selected_targets(books):
+	"""Split selected book payloads into transaction-book row ids and free-text
+	identifiers. Matching on the row id (txn_book) lets the counter act on rows
+	that have no linked Library Books record (legacy rows with NULL library_book)."""
+	row_names = {item.get("txn_book") for item in books if item.get("txn_book")}
+	identifiers = {
+		_parse_qr_identifier(item.get("library_book") or item.get("name") or item.get("accession_number") or item.get("isbn"))
+		for item in books
+	}
+	identifiers.discard("")
+	identifiers.discard(None)
+	return row_names, identifiers
+
+
+def _row_is_selected(row, row_names, identifiers):
+	return row.name in row_names or bool({row.library_book, row.isbn, row.accession_number} & identifiers)
+
+
 @frappe.whitelist()
 def return_books(student=None, books=None, branch=None):
 	books = _as_list(books)
 	if not books:
 		frappe.throw(_("Select at least one book to return"))
 
-	identifiers = {_parse_qr_identifier(item.get("library_book") or item.get("name") or item.get("accession_number") or item.get("isbn")) for item in books}
+	row_names, identifiers = _selected_targets(books)
 	updated_transactions = set()
 
-	active_rows = frappe.get_all(
-		"Library Transaction Book",
-		filters={"book_status": "READING", "parenttype": "Library Transactions"},
-		fields=["name", "parent", "library_book", "isbn", "accession_number"],
-		limit_page_length=500,
-	)
-	for row in active_rows:
-		parent_student = frappe.db.get_value("Library Transactions", row.parent, "student")
-		if student and parent_student != student:
-			continue
-		if not ({row.library_book, row.isbn, row.accession_number} & identifiers):
+	for row in _active_issue_rows(student):
+		if not _row_is_selected(row, row_names, identifiers):
 			continue
 		frappe.db.set_value("Library Transaction Book", row.name, {"book_status": "RETURNED", "return_date": today()})
-		frappe.db.set_value("Library Books", row.library_book, "available_quantity", 1)
+		if row.library_book:
+			frappe.db.set_value("Library Books", row.library_book, "available_quantity", 1)
 		updated_transactions.add(row.parent)
 
 	if not updated_transactions:
@@ -1056,6 +1111,38 @@ def return_books(student=None, books=None, branch=None):
 		_update_student_book_count(student_name)
 	frappe.db.commit()
 	return {"returned": len(updated_transactions), "transactions": list(updated_transactions)}
+
+
+@frappe.whitelist()
+def reissue_books(student=None, books=None, branch=None):
+	"""Renew the given issued books: extend due_date to today + loan_period.
+
+	Mirrors return_books (same active-row scan + matching) but keeps each book
+	in READING status, bumps reissue_count, and leaves availability untouched.
+	"""
+	books = _as_list(books)
+	if not books:
+		frappe.throw(_("Select at least one book to reissue"))
+
+	row_names, identifiers = _selected_targets(books)
+	new_due_date = add_days(today(), _loan_period())
+	updated_rows = 0
+
+	for row in _active_issue_rows(student):
+		if not _row_is_selected(row, row_names, identifiers):
+			continue
+		frappe.db.set_value(
+			"Library Transaction Book",
+			row.name,
+			{"due_date": new_due_date, "reissue_count": cint(row.reissue_count) + 1},
+		)
+		updated_rows += 1
+
+	if not updated_rows:
+		frappe.throw(_("No active issued books matched"))
+
+	frappe.db.commit()
+	return {"reissued": updated_rows, "due_date": str(new_due_date)}
 
 
 @frappe.whitelist()

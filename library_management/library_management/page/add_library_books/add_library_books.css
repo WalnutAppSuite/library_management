@@ -141,3 +141,39 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/* The book table scrolls inside its own box (fixed max-height) with a sticky
+   header, so the horizontal scrollbar always stays within the viewport — no
+   need to scroll the page down to reach it. */
+.library-intake .table-responsive {
+	max-height: calc(100vh - 300px);
+	min-height: 160px;
+	overflow: auto;
+}
+
+.library-intake .intake-table thead th {
+	position: sticky;
+	top: 0;
+	z-index: 3;
+}
+
+/* Always-visible, grabbable scrollbars (override OS overlay/auto-hide). */
+.library-intake .table-responsive::-webkit-scrollbar {
+	height: 14px;
+	width: 14px;
+}
+
+.library-intake .table-responsive::-webkit-scrollbar-track {
+	background: #eef2f7;
+}
+
+.library-intake .table-responsive::-webkit-scrollbar-thumb {
+	background: #94a3b8;
+	border-radius: 7px;
+	border: 3px solid #eef2f7;
+}
+
+.library-intake .reqd-star {
+	color: #e24c4c;
+	font-weight: 700;
+}

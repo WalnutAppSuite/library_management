@@ -17,6 +17,7 @@
   "reading_period",
   "column_break_vyxp",
   "book_status",
+  "reissue_count",
   "due__days",
   "take_home",
   "library_transaction_book"
@@ -87,6 +88,13 @@
    "options": "READING\nRETURNED\nLOST\nRENEWED"
   },
   {
+   "default": "0",
+   "fieldname": "reissue_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Reissue Count"
+  },
+  {
    "fieldname": "due__days",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -111,7 +119,7 @@
  "is_virtual": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-05-08 11:00:00.000000",
+ "modified": "2026-05-29 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Library Management",
  "name": "Library Books Student Table",
