@@ -141,3 +141,76 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/* The book table scrolls inside its own box (fixed max-height) with a sticky
+   header, so the horizontal scrollbar always stays within the viewport — no
+   need to scroll the page down to reach it. */
+.library-intake .table-responsive {
+	max-height: calc(100vh - 300px);
+	min-height: 160px;
+	overflow: auto;
+}
+
+.library-intake .intake-table thead th {
+	position: sticky;
+	top: 0;
+	z-index: 3;
+}
+
+/* Always-visible, grabbable scrollbars (override OS overlay/auto-hide). */
+.library-intake .table-responsive::-webkit-scrollbar {
+	height: 14px;
+	width: 14px;
+}
+
+.library-intake .table-responsive::-webkit-scrollbar-track {
+	background: #eef2f7;
+}
+
+.library-intake .table-responsive::-webkit-scrollbar-thumb {
+	background: #94a3b8;
+	border-radius: 7px;
+	border: 3px solid #eef2f7;
+}
+
+.library-intake .reqd-star {
+	color: #e24c4c;
+	font-weight: 700;
+}
+
+/* Library Reports dialog — one full-width button per report. */
+.library-report-links {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.library-report-links .btn-report {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	width: 100%;
+	text-align: left;
+	padding: 12px 14px;
+	background: #fff;
+	border: 1px solid var(--line, #e2e8f0);
+	border-radius: 8px;
+	transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.library-report-links .btn-report:hover {
+	background: #f8fafc;
+	border-color: #2563eb;
+	box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.library-report-links .report-label {
+	font-weight: 700;
+	color: #1e293b;
+}
+
+.library-report-links .report-hint {
+	font-size: 12px;
+	color: #64748b;
+}
