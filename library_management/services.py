@@ -99,27 +99,51 @@ def _settings_password(fieldname):
 
 @frappe.whitelist()
 def get_user_library_branch():
-	employee = frappe.db.get_value(
-		"Employee",
-		{"user_id": frappe.session.user},
-		["name", "employee_name", "school", "branch"],
-		as_dict=True,
+	"""Resolve the logged-in user's library branch (a School).
+
+	Branch scoping uses a standard Frappe **User Permission** on School, so the
+	app needs only Frappe + Education — no HR/HRMS dependency. As an optional
+	fallback, a linked Employee's school/branch is used when HR is installed
+	(keeps existing HR-based setups working). Returns ``is_ho=True`` (all
+	branches) when no single branch can be determined.
+	"""
+	branch = _user_permitted_school()
+
+	if not branch and frappe.db.exists("DocType", "Employee"):
+		branch = _employee_branch(frappe.session.user)
+
+	is_ho = (
+		not branch
+		or cstr(branch).strip().upper() == "HO"
+		or not frappe.db.exists("School", branch)
 	)
-	if not employee:
-		return {}
+	return {"branch": "" if is_ho else branch, "is_ho": is_ho}
 
-	branch = employee.school
-	if not branch and employee.branch and frappe.db.exists("School", employee.branch):
-		branch = employee.branch
 
-	is_ho = not branch or cstr(branch).strip().upper() == "HO" or not frappe.db.exists("School", branch)
+def _user_permitted_school():
+	"""The single School this user is restricted to via User Permission, if exactly one."""
+	schools = frappe.get_all(
+		"User Permission",
+		filters={"user": frappe.session.user, "allow": "School"},
+		pluck="for_value",
+	)
+	schools = [s for s in schools if frappe.db.exists("School", s)]
+	return schools[0] if len(schools) == 1 else ""
 
-	return {
-		"employee": employee.name,
-		"employee_name": employee.employee_name,
-		"branch": "" if is_ho else branch,
-		"is_ho": is_ho,
-	}
+
+def _employee_branch(user):
+	"""Optional HR fallback: a linked Employee's school/branch, when HR is present.
+
+	``school`` is a non-core field that only some sites add, so read it only
+	when the Employee doctype actually has it.
+	"""
+	fields = ["school"] if frappe.get_meta("Employee").has_field("school") else []
+	fields.append("branch")
+	row = frappe.db.get_value("Employee", {"user_id": user}, fields, as_dict=True)
+	if not row:
+		return ""
+	cand = row.get("school") or row.get("branch")
+	return cand if cand and frappe.db.exists("School", cand) else ""
 
 
 @frappe.whitelist()

@@ -53,3 +53,7 @@ jspm_packages/
 
 # Aider AI Chat
 .aider*
+
+# Internal / non-shipped docs (not part of the open-source distribution)
+docs/*.docx
+docs/project-report.md

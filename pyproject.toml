@@ -1,9 +1,9 @@
 [project]
 name = "library_management"
 authors = [
-    { name = "Frappe", email = "info@frappe.io"}
+    { name = "Library Management Contributors" }
 ]
-description = "App for managing Articles, Members, Memberships and Transactions for Libraries"
+description = "School library circulation for Frappe — issue/return/reissue books, bulk catalogue with ISBN lookup and QR labels, and circulation reports."
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
@@ -22,6 +22,11 @@ build-backend = "flit_core.buildapi"
 
 [tool.bench.frappe-dependencies]
 frappe = ">=15.0.0,<16.0.0"
+# Provides the Student doctype and the School (branch) doctype + Student.school /
+# reference_number / program fields this app reads. The School doctype + those
+# fields are being contributed upstream — bump the lower bound to the release
+# that includes them once the Education PR lands.
+education = ">=15.0.0"
 
 [tool.ruff]
 line-length = 110

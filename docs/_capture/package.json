@@ -1,0 +1,10 @@
+{
+  "name": "library-management-capture",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright capture scripts for screenshots + feature recordings",
+  "dependencies": {
+    "playwright": "^1.48.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+  }
+}

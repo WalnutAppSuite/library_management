@@ -1,12 +1,16 @@
 app_name = "library_management"
 app_title = "Library Management"
-app_publisher = "Frappe"
-app_description = "App for managing Articles, Members, Memberships and Transactions for Libraries"
+app_publisher = "Library Management Contributors"
+app_description = "School library circulation for Frappe — issue/return/reissue books, bulk catalogue with ISBN lookup and QR labels, and circulation reports."
 app_icon = "icon-book"
 app_color = "#589494"
-app_email = "info@frappe.io"
-app_url = "https://frappe.io/apps/library_management"
-app_version = "0.0.1"
+app_email = "noreply@example.com"
+app_url = "https://github.com/WalnutAppSuite/library_management"
+app_version = "1.0.0"
+
+# Circulation is tracked against the Education `Student`, and books link to the
+# Education `School` (branch). Education must be installed first.
+required_apps = ["frappe/education"]
 
 after_install = "library_management.setup.install.after_install"
 after_migrate = "library_management.migrate.after_migrate"

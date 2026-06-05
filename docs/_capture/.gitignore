@@ -1,0 +1,4 @@
+node_modules/
+syslibs/
+_videos/
+*.deb

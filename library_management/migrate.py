@@ -33,6 +33,29 @@ def _run_after_migrate():
             update_modified=False,
         )
 
+    # Self-ship the per-student issued counter on Education-only sites. Where
+    # another app (e.g. edu_quality) already defines it, leave that definition
+    # untouched — create only when missing so we never alter an existing
+    # field's type or position on a shared site.
+    if not frappe.db.exists(
+        "Custom Field", {"dt": "Student", "fieldname": "custom_number_of_books_issued"}
+    ):
+        create_custom_fields(
+            {
+                "Student": [
+                    {
+                        "fieldname": "custom_number_of_books_issued",
+                        "label": "Number of Books Issued",
+                        "fieldtype": "Data",
+                        "read_only": 1,
+                        "no_copy": 1,
+                        "insert_after": "image",
+                    }
+                ]
+            },
+            update=False,
+        )
+
     create_custom_fields(
         {
             "Student": [
