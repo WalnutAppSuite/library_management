@@ -43,6 +43,9 @@ def execute():
             # frappe.delete_doc(DocType, ..., force=True) does NOT drop the
             # underlying tab table — do that explicitly.
             if frappe.db.sql(f"SHOW TABLES LIKE 'tab{name}'"):
+                # Flush the delete_doc writes first: DROP TABLE is DDL and would
+                # otherwise trip Frappe's implicit-commit guard.
+                frappe.db.commit()
                 frappe.db.sql(f"DROP TABLE `tab{name}`")
                 frappe.logger("library_management").info(
                     f"drop_legacy_doctypes: dropped table tab{name}"

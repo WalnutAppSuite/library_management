@@ -171,6 +171,12 @@ def truncate_orphaned_snapshot_table():
     """
     if frappe.db.table_exists("Library Books Student Table"):
         before = frappe.db.count("Library Books Student Table")
+        # Flush pending writes first: TRUNCATE is DDL and trips Frappe's
+        # implicit-commit guard if earlier steps (quantity reconcile / custom
+        # field creation) left uncommitted writes in the transaction. This also
+        # affects a fresh install, where the reconcile UPDATEs still count as
+        # writes even on empty tables.
+        frappe.db.commit()
         frappe.db.sql("TRUNCATE `tabLibrary Books Student Table`")
         frappe.logger("library_management").info(
             f"library_revamp_uat_fix: truncated {before} stale Library Books Student Table rows"
