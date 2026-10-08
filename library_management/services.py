@@ -9,7 +9,9 @@ from contextlib import suppress
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Cast_
 from frappe.utils import add_days, cint, cstr, getdate, today
+from pypika import Order
 
 
 ISBN_RE = re.compile(r"(?:(?:97[89])[\-\s]?)?(?:\d[\-\s]?){9}[\dXx]")
@@ -510,12 +512,16 @@ def get_books_for_location(branch, room=None, book_shelf=None):
 	if book_shelf:
 		filters["book_shelf"] = book_shelf
 
-	return frappe.get_all(
-		"Library Books",
-		filters=filters,
-		fields=_book_fields(),
-		order_by="cast(accession_number as unsigned) asc, accession_number asc",
-		limit_page_length=500,
+	# v16 rejects CAST() in order_by; frappe.qb keeps the numeric sort in SQL so the limit still applies
+	books = frappe.qb.DocType("Library Books")
+	query = frappe.qb.from_(books).select(*[books[field] for field in _book_fields()])
+	for fieldname, value in filters.items():
+		query = query.where(books[fieldname] == value)
+	return (
+		query.orderby(Cast_(books.accession_number, "UNSIGNED"))
+		.orderby(books.accession_number)
+		.limit(500)
+		.run(as_dict=True)
 	)
 
 
@@ -861,12 +867,17 @@ def resolve_book_matches(identifier, branch=None, room=None, book_shelf=None):
 			isbn_filters["book_shelf"] = book_shelf
 		if branch:
 			isbn_filters["branch"] = branch
-		books = frappe.get_all(
-			"Library Books",
-			filters=isbn_filters,
-			fields=_book_fields(),
-			order_by="available_quantity desc, cast(accession_number as unsigned) asc, accession_number asc",
-			limit_page_length=50,
+		# v16 rejects CAST() in order_by; frappe.qb keeps the numeric sort in SQL so the limit still applies
+		lb = frappe.qb.DocType("Library Books")
+		query = frappe.qb.from_(lb).select(*[lb[field] for field in _book_fields()])
+		for fieldname, value in isbn_filters.items():
+			query = query.where(lb[fieldname] == value)
+		books = (
+			query.orderby(lb.available_quantity, order=Order.desc)
+			.orderby(Cast_(lb.accession_number, "UNSIGNED"))
+			.orderby(lb.accession_number)
+			.limit(50)
+			.run(as_dict=True)
 		)
 
 	books = [_book_match_row(book, branch) for book in books]
